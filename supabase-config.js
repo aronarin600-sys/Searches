@@ -16,8 +16,8 @@
  */
 
 const SPACFX_DEFAULT_CONFIG = {
-    // Your Supabase Project URL (from your project yhysqcialvapzajfmpkl):
-    SUPABASE_URL: "https://yhysqcialvapzajfmpkl.supabase.co",
+    // Your exact Supabase Project URL (ref: yhysgcialvapzajfmpkl):
+    SUPABASE_URL: "https://yhysgcialvapzajfmpkl.supabase.co",
     SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InloeXNnY2lhbHZhcHphamZtcGtsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQ5OTc0NjMsImV4cCI6MjExMDU3MzQ2M30.Af-h2rARANwv-w-AxWbND3i7L8Zo_eT87_o8lcgtOMI",
     
     // Reporting Currency configuration
@@ -27,9 +27,9 @@ const SPACFX_DEFAULT_CONFIG = {
 
 // Configuration: Always uses your verified project credentials
 const getAppConfig = () => {
-    // Verified credentials take precedence
-    const url = SPACFX_DEFAULT_CONFIG.SUPABASE_URL || localStorage.getItem("SPACFX_SUPABASE_URL") || "";
-    const key = SPACFX_DEFAULT_CONFIG.SUPABASE_ANON_KEY || localStorage.getItem("SPACFX_SUPABASE_ANON_KEY") || "";
+    // Sync verified credentials to ensure no outdated URL in browser storage
+    const url = SPACFX_DEFAULT_CONFIG.SUPABASE_URL;
+    const key = SPACFX_DEFAULT_CONFIG.SUPABASE_ANON_KEY;
     const savedCurrency = localStorage.getItem("SPACFX_REPORTING_CURRENCY") || SPACFX_DEFAULT_CONFIG.REPORTING_CURRENCY || "USD";
     const savedSymbol = localStorage.getItem("SPACFX_REPORTING_CURRENCY_SYMBOL") || SPACFX_DEFAULT_CONFIG.REPORTING_CURRENCY_SYMBOL || "$";
 
