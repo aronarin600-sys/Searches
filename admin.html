@@ -1,0 +1,1333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SPACFX — Administrator Dashboard</title>
+    <!-- Supabase JS Client via CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabase-config.js"></script>
+    <style>
+        :root {
+            --bg-base: #07090e;
+            --bg-card: #0f131c;
+            --bg-card-hover: #161c28;
+            --border-subtle: rgba(212, 175, 55, 0.18);
+            --border-gold: rgba(212, 175, 55, 0.45);
+            --gold-primary: #d4af37;
+            --gold-light: #f5e29f;
+            --gold-dark: #997b1e;
+            --text-main: #f1f5f9;
+            --text-muted: #94a3b8;
+            --success: #10b981;
+            --danger: #ef4444;
+            --neutral: #64748b;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-base);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Top Admin Navbar */
+        .admin-header {
+            background: rgba(15, 19, 28, 0.95);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border-subtle);
+            padding: 16px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 50;
+        }
+
+        .brand-group {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .brand-logo {
+            font-size: 1.35rem;
+            font-weight: 800;
+            letter-spacing: 2px;
+            color: var(--gold-primary);
+            text-decoration: none;
+            text-transform: uppercase;
+        }
+
+        .admin-badge {
+            background: rgba(212, 175, 55, 0.12);
+            color: var(--gold-light);
+            border: 1px solid var(--border-subtle);
+            font-size: 0.72rem;
+            font-weight: 600;
+            padding: 3px 8px;
+            border-radius: 4px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        .nav-actions {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .nav-link {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 0.9rem;
+            transition: color 0.2s;
+        }
+
+        .nav-link:hover {
+            color: var(--gold-primary);
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #f5d77f 0%, #d4af37 50%, #aa8c2c 100%);
+            color: #000000;
+            font-weight: 700;
+            padding: 9px 18px;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            font-size: 0.88rem;
+            letter-spacing: 0.5px;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: transform 0.15s, opacity 0.2s;
+        }
+
+        .btn:hover {
+            opacity: 0.92;
+            transform: translateY(-1px);
+        }
+
+        .btn-outline {
+            background: transparent;
+            color: var(--text-main);
+            border: 1px solid var(--border-subtle);
+        }
+
+        .btn-outline:hover {
+            border-color: var(--gold-primary);
+            color: var(--gold-light);
+            background: rgba(212, 175, 55, 0.05);
+        }
+
+        .btn-danger {
+            background: rgba(239, 68, 68, 0.15);
+            color: #fca5a5;
+            border: 1px solid rgba(239, 68, 68, 0.4);
+        }
+
+        .btn-danger:hover {
+            background: #ef4444;
+            color: #ffffff;
+        }
+
+        .btn-sm {
+            padding: 5px 10px;
+            font-size: 0.78rem;
+        }
+
+        /* Container */
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 30px 20px;
+            width: 100%;
+            flex: 1;
+        }
+
+        /* Notice / Alert Banners */
+        .alert {
+            background: rgba(212, 175, 55, 0.08);
+            border: 1px solid var(--border-subtle);
+            border-left: 4px solid var(--gold-primary);
+            padding: 14px 18px;
+            border-radius: 6px;
+            margin-bottom: 24px;
+            font-size: 0.92rem;
+            line-height: 1.5;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .alert-error {
+            background: rgba(239, 68, 68, 0.08);
+            border-color: rgba(239, 68, 68, 0.3);
+            border-left-color: var(--danger);
+            color: #fca5a5;
+        }
+
+        .alert-success {
+            background: rgba(16, 185, 129, 0.08);
+            border-color: rgba(16, 185, 129, 0.3);
+            border-left-color: var(--success);
+            color: #86efac;
+        }
+
+        /* Card styles */
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 10px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        .card-title {
+            font-size: 1.25rem;
+            color: var(--gold-light);
+            font-weight: 700;
+            letter-spacing: 0.5px;
+        }
+
+        /* Forms */
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 18px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .form-group.full-width {
+            grid-column: 1 / -1;
+        }
+
+        label {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            letter-spacing: 0.5px;
+        }
+
+        input, select, textarea {
+            background: #080b11;
+            border: 1px solid rgba(212, 175, 55, 0.25);
+            color: #ffffff;
+            padding: 10px 14px;
+            border-radius: 6px;
+            font-size: 0.95rem;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            border-color: var(--gold-primary);
+            box-shadow: 0 0 0 2px rgba(212, 175, 55, 0.15);
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        .form-help {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 8px;
+            border-bottom: 1px solid var(--border-subtle);
+            margin-bottom: 24px;
+            overflow-x: auto;
+        }
+
+        .tab-btn {
+            background: transparent;
+            color: var(--text-muted);
+            border: none;
+            padding: 12px 20px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .tab-btn:hover {
+            color: var(--gold-light);
+        }
+
+        .tab-btn.active {
+            color: var(--gold-primary);
+            border-bottom-color: var(--gold-primary);
+            background: rgba(212, 175, 55, 0.05);
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* Table */
+        .table-responsive {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+            text-align: left;
+        }
+
+        th {
+            background: #0a0d14;
+            color: var(--text-muted);
+            padding: 12px 14px;
+            font-weight: 600;
+            border-bottom: 1px solid var(--border-subtle);
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            letter-spacing: 0.5px;
+        }
+
+        td {
+            padding: 14px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+            vertical-align: middle;
+        }
+
+        tr:hover td {
+            background: rgba(212, 175, 55, 0.02);
+        }
+
+        /* Badges */
+        .status-badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 0.76rem;
+            font-weight: 600;
+        }
+
+        .status-profit {
+            background: rgba(16, 185, 129, 0.15);
+            color: var(--success);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .status-loss {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--danger);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .status-neutral {
+            background: rgba(100, 116, 139, 0.2);
+            color: #cbd5e1;
+            border: 1px solid rgba(100, 116, 139, 0.3);
+        }
+
+        .pub-badge {
+            padding: 2px 7px;
+            border-radius: 4px;
+            font-size: 0.72rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .pub-published {
+            background: rgba(212, 175, 55, 0.15);
+            color: var(--gold-light);
+            border: 1px solid var(--border-subtle);
+        }
+
+        .pub-draft {
+            background: rgba(148, 163, 184, 0.1);
+            color: var(--text-muted);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+        }
+
+        /* Auth Screen */
+        .auth-container {
+            max-width: 440px;
+            margin: 60px auto;
+            width: 100%;
+        }
+
+        .auth-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-gold);
+            border-radius: 12px;
+            padding: 36px 30px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+            text-align: center;
+        }
+
+        .auth-icon {
+            font-size: 2.2rem;
+            margin-bottom: 16px;
+        }
+
+        /* Modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.75);
+            backdrop-filter: blur(6px);
+            z-index: 100;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-gold);
+            border-radius: 12px;
+            max-width: 600px;
+            width: 100%;
+            padding: 28px;
+            box-shadow: 0 15px 50px rgba(0, 0, 0, 0.8);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Admin Header -->
+    <header class="admin-header">
+        <div class="brand-group">
+            <a href="index.html" class="brand-logo">SPACFX</a>
+            <span class="admin-badge">Admin Portal</span>
+        </div>
+        <div class="nav-actions">
+            <a href="index.html" class="nav-link">← Public Website</a>
+            <button id="openConfigModalBtn" class="btn btn-outline btn-sm">⚙️ Database Setup</button>
+            <button id="logoutBtn" class="btn btn-outline btn-sm" style="display: none;">Sign Out</button>
+        </div>
+    </header>
+
+    <div class="container">
+
+        <!-- Connection Alert (when Supabase credentials are missing) -->
+        <div id="unconfiguredBanner" class="alert" style="display: none;">
+            <div>
+                <strong>Supabase Connection Needed:</strong> Add your Supabase Project URL and Anon Key to activate real database storage.
+            </div>
+            <button class="btn btn-sm" onclick="openConfigModal()">Configure Now</button>
+        </div>
+
+        <div id="statusMessage"></div>
+
+        <!-- ========================================== -->
+        <!-- SIGN IN VIEW (When not logged into Supabase) -->
+        <!-- ========================================== -->
+        <div id="authView" class="auth-container">
+            <div class="auth-card">
+                <div class="auth-icon">🛡️</div>
+                <h2 style="color: var(--gold-light); margin-bottom: 8px;">Administrator Sign-In</h2>
+                <p style="color: var(--text-muted); font-size: 0.88rem; margin-bottom: 24px;">
+                    Protected access to daily performance tracking & community reviews.
+                </p>
+
+                <form id="loginForm" style="display: flex; flex-direction: column; gap: 16px; text-align: left;">
+                    <div class="form-group">
+                        <label for="loginEmail">Admin Email</label>
+                        <input type="email" id="loginEmail" placeholder="admin@spacfx.com" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="loginPassword">Password</label>
+                        <input type="password" id="loginPassword" placeholder="••••••••••••" required>
+                    </div>
+                    <button type="submit" class="btn" id="loginSubmitBtn" style="justify-content: center; margin-top: 8px;">
+                        Sign In to Dashboard
+                    </button>
+                </form>
+
+                <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.06); font-size: 0.8rem; color: var(--text-muted);">
+                    <p>Accounts are authenticated via Supabase Auth with Row Level Security enforcement.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- DASHBOARD VIEW (When logged in) -->
+        <!-- ========================================== -->
+        <div id="dashboardView" style="display: none;">
+            
+            <!-- Navigation Tabs -->
+            <div class="tabs">
+                <button class="tab-btn active" onclick="switchTab('tab-performance')">📊 Daily Performance Records</button>
+                <button class="tab-btn" onclick="switchTab('tab-reviews')">⭐ Mentorship Reviews</button>
+                <button class="tab-btn" onclick="switchTab('tab-settings')">⚙️ Settings & SQL Guide</button>
+            </div>
+
+            <!-- TAB 1: DAILY PERFORMANCE TRACKER -->
+            <div id="tab-performance" class="tab-content active">
+                
+                <!-- Quick Daily Entry Card -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title" id="formHeader">Add Daily Trading Record</h3>
+                        <button class="btn btn-outline btn-sm" id="cancelEditBtn" style="display: none;" onclick="resetPerformanceForm()">Cancel Edit</button>
+                    </div>
+                    
+                    <form id="performanceForm">
+                        <input type="hidden" id="editRecordId" value="">
+                        
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label for="perfDate">Trading Date *</label>
+                                <input type="date" id="perfDate" required>
+                                <span class="form-help">One record represents the overall result for this date.</span>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="perfPnl">Daily Net Realized P/L (<span class="currencyLabel">USD</span>) *</label>
+                                <input type="number" step="0.01" id="perfPnl" placeholder="e.g. 1450.00 or -320.50" required>
+                                <span class="form-help">Net realized P/L after trading costs only. Do not include floating P/L or deposits.</span>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="perfStatus">Trading Status *</label>
+                                <select id="perfStatus" required>
+                                    <option value="Profit">Profit</option>
+                                    <option value="Loss">Loss</option>
+                                    <option value="Break-even">Break-even</option>
+                                    <option value="No Trading">No Trading</option>
+                                </select>
+                                <span class="form-help">Auto-updates based on P/L, or select manually.</span>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="perfTrades">Number of Trades (Optional)</label>
+                                <input type="number" min="0" id="perfTrades" placeholder="e.g. 3">
+                            </div>
+
+                            <div class="form-group full-width">
+                                <label for="perfNotes">Market Notes (Optional)</label>
+                                <textarea id="perfNotes" placeholder="e.g., Gold reacted to US CPI data; London breakout setup executed cleanly according to risk plan."></textarea>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="perfPublication">Publication Status *</label>
+                                <select id="perfPublication" required>
+                                    <option value="Draft">Draft (Private, Admin Only)</option>
+                                    <option value="Published">Published (Visible on Public Website)</option>
+                                </select>
+                                <span class="form-help">Only Published records are visible to public visitors.</span>
+                            </div>
+                        </div>
+
+                        <div style="margin-top: 20px; display: flex; gap: 12px; justify-content: flex-end;">
+                            <button type="submit" class="btn" id="savePerfBtn">💾 Save Performance Record</button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Saved Performance Records Table -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">All Saved Records</h3>
+                        <span id="recordCount" style="color: var(--text-muted); font-size: 0.85rem;">0 records</span>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table id="performanceTable">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Net Realized P/L</th>
+                                    <th>Status</th>
+                                    <th>Trades</th>
+                                    <th>Notes</th>
+                                    <th>Publication</th>
+                                    <th style="text-align: right;">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="performanceTableBody">
+                                <tr>
+                                    <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 30px;">
+                                        Loading records...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 2: STUDENT REVIEWS -->
+            <div id="tab-reviews" class="tab-content">
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title" id="reviewFormHeader">Add Student Mentorship Review</h3>
+                        <button class="btn btn-outline btn-sm" id="cancelReviewEditBtn" style="display: none;" onclick="resetReviewForm()">Cancel Edit</button>
+                    </div>
+
+                    <form id="reviewForm">
+                        <input type="hidden" id="editReviewId" value="">
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label for="revStudentName">Student Name / Initial *</label>
+                                <input type="text" id="revStudentName" placeholder="e.g. David K." required>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="revRating">Rating (1 to 5 Stars) *</label>
+                                <select id="revRating" required>
+                                    <option value="5">★★★★★ (5 Stars)</option>
+                                    <option value="4">★★★★☆ (4 Stars)</option>
+                                    <option value="3">★★★☆☆ (3 Stars)</option>
+                                    <option value="2">★★☆☆☆ (2 Stars)</option>
+                                    <option value="1">★☆☆☆☆ (1 Star)</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="revLocation">Location / Cohort (Optional)</label>
+                                <input type="text" id="revLocation" placeholder="e.g. London, UK • Advanced Mentorship">
+                            </div>
+
+                            <div class="form-group">
+                                <label for="revPublication">Publication Status *</label>
+                                <select id="revPublication" required>
+                                    <option value="Draft">Draft (Private, Pending Approval)</option>
+                                    <option value="Published">Published (Approved & Visible Publicly)</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group full-width">
+                                <label for="revText">Review Text *</label>
+                                <textarea id="revText" required placeholder="Real student feedback on the mentorship curriculum, risk discipline, and live gold sessions..."></textarea>
+                                <span class="form-help">Strict policy: Never fabricate or invent student quotes or profits. Only publish real verified feedback.</span>
+                            </div>
+                        </div>
+
+                        <div style="margin-top: 20px; display: flex; gap: 12px; justify-content: flex-end;">
+                            <button type="submit" class="btn" id="saveReviewBtn">💾 Save Review</button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Reviews Table -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">Student Reviews Directory</h3>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Student</th>
+                                    <th>Rating</th>
+                                    <th>Cohort / Location</th>
+                                    <th>Review Snippet</th>
+                                    <th>Status</th>
+                                    <th style="text-align: right;">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="reviewsTableBody">
+                                <tr>
+                                    <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 30px;">
+                                        Loading reviews...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 3: SETTINGS & SQL SETUP -->
+            <div id="tab-settings" class="tab-content">
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">Reporting Currency & Settings</h3>
+                    </div>
+
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="currencyCode">Reporting Currency</label>
+                            <select id="currencyCode">
+                                <option value="USD">USD — US Dollar ($)</option>
+                                <option value="EUR">EUR — Euro (€)</option>
+                                <option value="GBP">GBP — British Pound (£)</option>
+                                <option value="AUD">AUD — Australian Dollar (A$)</option>
+                                <option value="CAD">CAD — Canadian Dollar (C$)</option>
+                                <option value="CHF">CHF — Swiss Franc (CHF)</option>
+                                <option value="JPY">JPY — Japanese Yen (¥)</option>
+                            </select>
+                            <span class="form-help">Used uniformly across all dashboard statistics and calendar views.</span>
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 18px;">
+                        <button class="btn btn-sm" onclick="saveCurrencyPreference()">Save Currency</button>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">Supabase Database Setup Guide</h3>
+                    </div>
+                    <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 16px; line-height: 1.6;">
+                        To activate your backend, follow these 3 simple steps:
+                    </p>
+                    <ol style="color: var(--text-muted); font-size: 0.9rem; margin-left: 20px; line-height: 1.8;">
+                        <li>Log in to your free account at <a href="https://supabase.com" target="_blank" style="color: var(--gold-light);">supabase.com</a>.</li>
+                        <li>Open the <strong>SQL Editor</strong> tab on the left sidebar.</li>
+                        <li>Open the file <code style="color: var(--gold-primary);">supabase_schema.sql</code> in your project, paste its contents into the SQL editor, and click <strong>Run</strong>.</li>
+                        <li>Create your administrator user in Supabase under <strong>Authentication > Users</strong>.</li>
+                        <li>Click <strong>Database Setup</strong> above to enter your Project URL and public "anon" key.</li>
+                    </ol>
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- Database Configuration Modal -->
+    <div id="configModal" class="modal-overlay">
+        <div class="modal-card">
+            <h3 style="color: var(--gold-light); margin-bottom: 8px;">⚙️ Database & Environment Configuration</h3>
+            <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 20px;">
+                Enter your Supabase project credentials. These are saved securely in your local browser session for previewing.
+            </p>
+
+            <form id="configForm" style="display: flex; flex-direction: column; gap: 14px;">
+                <div class="form-group">
+                    <label for="cfgUrl">Supabase Project URL</label>
+                    <input type="url" id="cfgUrl" placeholder="https://your-project.supabase.co" required>
+                    <span class="form-help">Found in Supabase: Project Settings -> API -> Project URL</span>
+                </div>
+
+                <div class="form-group">
+                    <label for="cfgKey">Supabase Public "anon" API Key</label>
+                    <input type="text" id="cfgKey" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6..." required>
+                    <span class="form-help">⚠️ Only use the public "anon" key. Never enter your "service_role" secret key here!</span>
+                </div>
+
+                <div class="form-group">
+                    <label for="cfgCurrency">Reporting Currency</label>
+                    <select id="cfgCurrency">
+                        <option value="USD|$">USD ($)</option>
+                        <option value="EUR|€">EUR (€)</option>
+                        <option value="GBP|£">GBP (£)</option>
+                        <option value="AUD|A$">AUD (A$)</option>
+                        <option value="CAD|C$">CAD (C$)</option>
+                        <option value="CHF|CHF">CHF (CHF)</option>
+                        <option value="JPY|¥">JPY (¥)</option>
+                    </select>
+                </div>
+
+                <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px;">
+                    <button type="button" class="btn btn-outline" onclick="closeConfigModal()">Cancel</button>
+                    <button type="submit" class="btn">Save & Connect</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // DOM Elements
+        const authView = document.getElementById("authView");
+        const dashboardView = document.getElementById("dashboardView");
+        const loginForm = document.getElementById("loginForm");
+        const logoutBtn = document.getElementById("logoutBtn");
+        const statusMessage = document.getElementById("statusMessage");
+        const unconfiguredBanner = document.getElementById("unconfiguredBanner");
+        const configModal = document.getElementById("configModal");
+
+        // Forms
+        const performanceForm = document.getElementById("performanceForm");
+        const perfDate = document.getElementById("perfDate");
+        const perfPnl = document.getElementById("perfPnl");
+        const perfStatus = document.getElementById("perfStatus");
+        const perfTrades = document.getElementById("perfTrades");
+        const perfNotes = document.getElementById("perfNotes");
+        const perfPublication = document.getElementById("perfPublication");
+        const editRecordId = document.getElementById("editRecordId");
+
+        const reviewForm = document.getElementById("reviewForm");
+        const revStudentName = document.getElementById("revStudentName");
+        const revRating = document.getElementById("revRating");
+        const revLocation = document.getElementById("revLocation");
+        const revText = document.getElementById("revText");
+        const revPublication = document.getElementById("revPublication");
+        const editReviewId = document.getElementById("editReviewId");
+
+        let currentRecords = [];
+        let currentReviews = [];
+
+        // Auto-set today's date in entry form
+        const todayStr = new Date().toISOString().split("T")[0];
+        perfDate.value = todayStr;
+
+        // Auto-suggest status when P/L is typed
+        perfPnl.addEventListener("input", (e) => {
+            const val = parseFloat(e.target.value);
+            if (!isNaN(val)) {
+                if (val > 0) perfStatus.value = "Profit";
+                else if (val < 0) perfStatus.value = "Loss";
+                else perfStatus.value = "Break-even";
+            }
+        });
+
+        // Tab Switching
+        window.switchTab = (tabId) => {
+            document.querySelectorAll(".tab-content").forEach(el => el.classList.remove("active"));
+            document.querySelectorAll(".tab-btn").forEach(el => el.classList.remove("active"));
+            
+            document.getElementById(tabId).classList.add("active");
+            event.target.classList.add("active");
+        };
+
+        // Notice helper
+        function showNotice(msg, type = "info") {
+            const div = document.createElement("div");
+            div.className = `alert alert-${type === "error" ? "error" : (type === "success" ? "success" : "")}`;
+            div.innerHTML = `<div>${msg}</div>`;
+            statusMessage.innerHTML = "";
+            statusMessage.appendChild(div);
+            setTimeout(() => {
+                div.remove();
+            }, 6000);
+        }
+
+        // Check Configuration & Auth state on load
+        async function checkAuthState() {
+            const config = window.SPACFX.getConfig();
+            
+            if (!window.SPACFX.isConfigured()) {
+                unconfiguredBanner.style.display = "flex";
+            } else {
+                unconfiguredBanner.style.display = "none";
+            }
+
+            const supabase = window.SPACFX.getClient();
+            if (!supabase) {
+                authView.style.display = "block";
+                dashboardView.style.display = "none";
+                logoutBtn.style.display = "none";
+                return;
+            }
+
+            try {
+                const { data: { session }, error } = await supabase.auth.getSession();
+                if (session && session.user) {
+                    showDashboard();
+                } else {
+                    authView.style.display = "block";
+                    dashboardView.style.display = "none";
+                    logoutBtn.style.display = "none";
+                }
+            } catch (err) {
+                console.error("Auth check error:", err);
+                authView.style.display = "block";
+                dashboardView.style.display = "none";
+            }
+        }
+
+        function showDashboard() {
+            authView.style.display = "none";
+            dashboardView.style.display = "block";
+            logoutBtn.style.display = "inline-flex";
+            loadPerformanceRecords();
+            loadReviews();
+            updateCurrencyLabels();
+        }
+
+        // Update Currency Labels
+        function updateCurrencyLabels() {
+            const cfg = window.SPACFX.getConfig();
+            document.querySelectorAll(".currencyLabel").forEach(el => el.textContent = cfg.REPORTING_CURRENCY);
+            const currencyCode = document.getElementById("currencyCode");
+            if (currencyCode) currencyCode.value = cfg.REPORTING_CURRENCY;
+        }
+
+        // Login Handler
+        loginForm.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const email = document.getElementById("loginEmail").value.trim();
+            const password = document.getElementById("loginPassword").value;
+            const submitBtn = document.getElementById("loginSubmitBtn");
+
+            const supabase = window.SPACFX.getClient();
+            if (!supabase) {
+                showNotice("Please click 'Database Setup' first to connect your Supabase credentials.", "error");
+                openConfigModal();
+                return;
+            }
+
+            submitBtn.disabled = true;
+            submitBtn.textContent = "Verifying...";
+
+            try {
+                const { data, error } = await supabase.auth.signInWithPassword({
+                    email,
+                    password,
+                });
+
+                if (error) {
+                    showNotice("Sign-in failed: " + error.message, "error");
+                } else {
+                    showNotice("Welcome back, Administrator.", "success");
+                    showDashboard();
+                }
+            } catch (err) {
+                showNotice("Authentication error: " + err.message, "error");
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = "Sign In to Dashboard";
+            }
+        });
+
+        // Logout Handler
+        logoutBtn.addEventListener("click", async () => {
+            const supabase = window.SPACFX.getClient();
+            if (supabase) {
+                await supabase.auth.signOut();
+            }
+            showNotice("You have signed out successfully.", "info");
+            authView.style.display = "block";
+            dashboardView.style.display = "none";
+            logoutBtn.style.display = "none";
+        });
+
+        // ==========================================
+        // PERFORMANCE RECORDS MANAGEMENT
+        // ==========================================
+
+        async function loadPerformanceRecords() {
+            const supabase = window.SPACFX.getClient();
+            const tbody = document.getElementById("performanceTableBody");
+            const recordCount = document.getElementById("recordCount");
+
+            if (!supabase) return;
+
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 20px;">Fetching records...</td></tr>`;
+
+            try {
+                const { data, error } = await supabase
+                    .from("daily_performance")
+                    .select("*")
+                    .order("trading_date", { ascending: false });
+
+                if (error) throw error;
+
+                currentRecords = data || [];
+                recordCount.textContent = `${currentRecords.length} record${currentRecords.length === 1 ? '' : 's'}`;
+
+                if (currentRecords.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 30px;">No trading records saved yet. Use the form above to add your first day!</td></tr>`;
+                    return;
+                }
+
+                tbody.innerHTML = currentRecords.map(rec => {
+                    const pnlClass = rec.daily_net_pnl > 0 ? "status-profit" : (rec.daily_net_pnl < 0 ? "status-loss" : "status-neutral");
+                    const statusClass = rec.trading_status === "Profit" ? "status-profit" : (rec.trading_status === "Loss" ? "status-loss" : "status-neutral");
+                    const pubClass = rec.publication_status === "Published" ? "pub-published" : "pub-draft";
+
+                    return `
+                        <tr>
+                            <td><strong>${rec.trading_date}</strong></td>
+                            <td class="${pnlClass}" style="font-weight: 700;">
+                                ${window.SPACFX.formatCurrency(rec.daily_net_pnl, true)}
+                            </td>
+                            <td><span class="status-badge ${statusClass}">${rec.trading_status}</span></td>
+                            <td>${rec.num_trades !== null ? rec.num_trades : '—'}</td>
+                            <td style="max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${rec.market_notes || ''}">
+                                ${rec.market_notes || '<span style="color: var(--text-muted);">—</span>'}
+                            </td>
+                            <td><span class="pub-badge ${pubClass}">${rec.publication_status}</span></td>
+                            <td style="text-align: right; white-space: nowrap;">
+                                <button class="btn btn-outline btn-sm" onclick="editPerformance('${rec.id}')">Edit</button>
+                                <button class="btn btn-outline btn-sm" onclick="togglePublishPerformance('${rec.id}', '${rec.publication_status}')">
+                                    ${rec.publication_status === 'Published' ? 'Unpublish' : 'Publish'}
+                                </button>
+                                <button class="btn btn-danger btn-sm" onclick="deletePerformance('${rec.id}')">Delete</button>
+                            </td>
+                        </tr>
+                    `;
+                }).join("");
+
+            } catch (err) {
+                console.error("Error loading performance:", err);
+                tbody.innerHTML = `<tr><td colspan="7" style="color: var(--danger); text-align: center;">Error loading records: ${err.message}</td></tr>`;
+            }
+        }
+
+        // Save Performance Record
+        performanceForm.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const supabase = window.SPACFX.getClient();
+            if (!supabase) return;
+
+            const recordId = editRecordId.value;
+            const dateVal = perfDate.value;
+            const pnlVal = parseFloat(perfPnl.value);
+            const statusVal = perfStatus.value;
+            const tradesVal = perfTrades.value !== "" ? parseInt(perfTrades.value, 10) : null;
+            const notesVal = perfNotes.value.trim() || null;
+            const pubVal = perfPublication.value;
+
+            const saveBtn = document.getElementById("savePerfBtn");
+            saveBtn.disabled = true;
+            saveBtn.textContent = "Saving...";
+
+            const recordData = {
+                trading_date: dateVal,
+                daily_net_pnl: pnlVal,
+                trading_status: statusVal,
+                num_trades: tradesVal,
+                market_notes: notesVal,
+                publication_status: pubVal,
+            };
+
+            try {
+                if (recordId) {
+                    // Update existing
+                    const { error } = await supabase
+                        .from("daily_performance")
+                        .update(recordData)
+                        .eq("id", recordId);
+                    if (error) throw error;
+                    showNotice(`Record for ${dateVal} updated successfully.`, "success");
+                } else {
+                    // Insert (or conflict check on date)
+                    const { error } = await supabase
+                        .from("daily_performance")
+                        .insert([recordData]);
+                    
+                    if (error) {
+                        // Unique date constraint violation
+                        if (error.code === "23505") {
+                            showNotice(`A record already exists for date ${dateVal}. You can edit the existing record below.`, "error");
+                            return;
+                        }
+                        throw error;
+                    }
+                    showNotice(`Record for ${dateVal} added successfully.`, "success");
+                }
+
+                resetPerformanceForm();
+                await loadPerformanceRecords();
+            } catch (err) {
+                showNotice("Failed to save record: " + err.message, "error");
+            } finally {
+                saveBtn.disabled = false;
+                saveBtn.textContent = "💾 Save Performance Record";
+            }
+        });
+
+        // Edit Performance helper
+        window.editPerformance = (id) => {
+            const rec = currentRecords.find(r => r.id === id);
+            if (!rec) return;
+
+            editRecordId.value = rec.id;
+            perfDate.value = rec.trading_date;
+            perfPnl.value = rec.daily_net_pnl;
+            perfStatus.value = rec.trading_status;
+            perfTrades.value = rec.num_trades !== null ? rec.num_trades : "";
+            perfNotes.value = rec.market_notes || "";
+            perfPublication.value = rec.publication_status;
+
+            document.getElementById("formHeader").textContent = `Edit Record (${rec.trading_date})`;
+            document.getElementById("cancelEditBtn").style.display = "inline-flex";
+            window.scrollTo({ top: 120, behavior: "smooth" });
+        };
+
+        window.resetPerformanceForm = () => {
+            editRecordId.value = "";
+            performanceForm.reset();
+            perfDate.value = todayStr;
+            document.getElementById("formHeader").textContent = "Add Daily Trading Record";
+            document.getElementById("cancelEditBtn").style.display = "none";
+        };
+
+        window.togglePublishPerformance = async (id, currentStatus) => {
+            const supabase = window.SPACFX.getClient();
+            if (!supabase) return;
+
+            const newStatus = currentStatus === "Published" ? "Draft" : "Published";
+            try {
+                const { error } = await supabase
+                    .from("daily_performance")
+                    .update({ publication_status: newStatus })
+                    .eq("id", id);
+                if (error) throw error;
+                showNotice(`Record status changed to ${newStatus}.`, "success");
+                await loadPerformanceRecords();
+            } catch (err) {
+                showNotice("Could not update status: " + err.message, "error");
+            }
+        };
+
+        window.deletePerformance = async (id) => {
+            const rec = currentRecords.find(r => r.id === id);
+            const dateStr = rec ? rec.trading_date : "this record";
+            if (!confirm(`Are you sure you want to permanently delete the trading record for ${dateStr}?`)) {
+                return;
+            }
+
+            const supabase = window.SPACFX.getClient();
+            if (!supabase) return;
+
+            try {
+                const { error } = await supabase
+                    .from("daily_performance")
+                    .delete()
+                    .eq("id", id);
+                if (error) throw error;
+                showNotice("Record deleted successfully.", "info");
+                await loadPerformanceRecords();
+            } catch (err) {
+                showNotice("Failed to delete record: " + err.message, "error");
+            }
+        };
+
+        // ==========================================
+        // STUDENT REVIEWS MANAGEMENT
+        // ==========================================
+
+        async function loadReviews() {
+            const supabase = window.SPACFX.getClient();
+            const tbody = document.getElementById("reviewsTableBody");
+            if (!supabase) return;
+
+            tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 20px;">Fetching reviews...</td></tr>`;
+
+            try {
+                const { data, error } = await supabase
+                    .from("student_reviews")
+                    .select("*")
+                    .order("created_at", { ascending: false });
+
+                if (error) throw error;
+                currentReviews = data || [];
+
+                if (currentReviews.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 30px;">No reviews added yet. Add verified student feedback using the form above.</td></tr>`;
+                    return;
+                }
+
+                tbody.innerHTML = currentReviews.map(rev => {
+                    const stars = "★".repeat(rev.rating) + "☆".repeat(5 - rev.rating);
+                    const pubClass = rev.publication_status === "Published" ? "pub-published" : "pub-draft";
+
+                    return `
+                        <tr>
+                            <td><strong>${rev.student_name}</strong></td>
+                            <td style="color: var(--gold-primary); font-size: 1.05rem;">${stars}</td>
+                            <td>${rev.location_or_batch || '—'}</td>
+                            <td style="max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${rev.review_text}">
+                                "${rev.review_text}"
+                            </td>
+                            <td><span class="pub-badge ${pubClass}">${rev.publication_status}</span></td>
+                            <td style="text-align: right; white-space: nowrap;">
+                                <button class="btn btn-outline btn-sm" onclick="editReview('${rev.id}')">Edit</button>
+                                <button class="btn btn-outline btn-sm" onclick="togglePublishReview('${rev.id}', '${rev.publication_status}')">
+                                    ${rev.publication_status === 'Published' ? 'Unpublish' : 'Publish'}
+                                </button>
+                                <button class="btn btn-danger btn-sm" onclick="deleteReview('${rev.id}')">Delete</button>
+                            </td>
+                        </tr>
+                    `;
+                }).join("");
+
+            } catch (err) {
+                console.error("Error loading reviews:", err);
+                tbody.innerHTML = `<tr><td colspan="6" style="color: var(--danger); text-align: center;">Error loading reviews: ${err.message}</td></tr>`;
+            }
+        }
+
+        reviewForm.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const supabase = window.SPACFX.getClient();
+            if (!supabase) return;
+
+            const reviewId = editReviewId.value;
+            const nameVal = revStudentName.value.trim();
+            const ratingVal = parseInt(revRating.value, 10);
+            const locationVal = revLocation.value.trim() || null;
+            const textVal = revText.value.trim();
+            const pubVal = revPublication.value;
+
+            const saveBtn = document.getElementById("saveReviewBtn");
+            saveBtn.disabled = true;
+
+            const reviewData = {
+                student_name: nameVal,
+                rating: ratingVal,
+                location_or_batch: locationVal,
+                review_text: textVal,
+                publication_status: pubVal,
+            };
+
+            try {
+                if (reviewId) {
+                    const { error } = await supabase
+                        .from("student_reviews")
+                        .update(reviewData)
+                        .eq("id", reviewId);
+                    if (error) throw error;
+                    showNotice(`Review for ${nameVal} updated.`, "success");
+                } else {
+                    const { error } = await supabase
+                        .from("student_reviews")
+                        .insert([reviewData]);
+                    if (error) throw error;
+                    showNotice(`Review for ${nameVal} saved successfully.`, "success");
+                }
+                resetReviewForm();
+                await loadReviews();
+            } catch (err) {
+                showNotice("Failed to save review: " + err.message, "error");
+            } finally {
+                saveBtn.disabled = false;
+            }
+        });
+
+        window.editReview = (id) => {
+            const rev = currentReviews.find(r => r.id === id);
+            if (!rev) return;
+
+            editReviewId.value = rev.id;
+            revStudentName.value = rev.student_name;
+            revRating.value = rev.rating;
+            revLocation.value = rev.location_or_batch || "";
+            revText.value = rev.review_text;
+            revPublication.value = rev.publication_status;
+
+            document.getElementById("reviewFormHeader").textContent = `Edit Review (${rev.student_name})`;
+            document.getElementById("cancelReviewEditBtn").style.display = "inline-flex";
+            window.scrollTo({ top: 120, behavior: "smooth" });
+        };
+
+        window.resetReviewForm = () => {
+            editReviewId.value = "";
+            reviewForm.reset();
+            document.getElementById("reviewFormHeader").textContent = "Add Student Mentorship Review";
+            document.getElementById("cancelReviewEditBtn").style.display = "none";
+        };
+
+        window.togglePublishReview = async (id, currentStatus) => {
+            const supabase = window.SPACFX.getClient();
+            if (!supabase) return;
+
+            const newStatus = currentStatus === "Published" ? "Draft" : "Published";
+            try {
+                const { error } = await supabase
+                    .from("student_reviews")
+                    .update({ publication_status: newStatus })
+                    .eq("id", id);
+                if (error) throw error;
+                showNotice(`Review status set to ${newStatus}.`, "success");
+                await loadReviews();
+            } catch (err) {
+                showNotice("Error toggling review: " + err.message, "error");
+            }
+        };
+
+        window.deleteReview = async (id) => {
+            if (!confirm("Are you sure you want to delete this review?")) return;
+            const supabase = window.SPACFX.getClient();
+            if (!supabase) return;
+
+            try {
+                const { error } = await supabase.from("student_reviews").delete().eq("id", id);
+                if (error) throw error;
+                showNotice("Review deleted.", "info");
+                await loadReviews();
+            } catch (err) {
+                showNotice("Error deleting review: " + err.message, "error");
+            }
+        };
+
+        // Currency preference saving
+        window.saveCurrencyPreference = () => {
+            const code = document.getElementById("currencyCode").value;
+            const symbolMap = {
+                USD: "$", EUR: "€", GBP: "£", AUD: "A$", CAD: "C$", CHF: "CHF", JPY: "¥"
+            };
+            const symbol = symbolMap[code] || "$";
+            window.SPACFX.saveConfig(null, null, code, symbol);
+            updateCurrencyLabels();
+            showNotice(`Currency updated to ${code} (${symbol}).`, "success");
+        };
+
+        // Configuration Modal
+        window.openConfigModal = () => {
+            const cfg = window.SPACFX.getConfig();
+            document.getElementById("cfgUrl").value = cfg.SUPABASE_URL || "";
+            document.getElementById("cfgKey").value = cfg.SUPABASE_ANON_KEY || "";
+            configModal.classList.add("active");
+        };
+
+        window.closeConfigModal = () => {
+            configModal.classList.remove("active");
+        };
+
+        document.getElementById("openConfigModalBtn").addEventListener("click", openConfigModal);
+
+        document.getElementById("configForm").addEventListener("submit", (e) => {
+            e.preventDefault();
+            const url = document.getElementById("cfgUrl").value.trim();
+            const key = document.getElementById("cfgKey").value.trim();
+            const currencyCombo = document.getElementById("cfgCurrency").value.split("|");
+            
+            window.SPACFX.saveConfig(url, key, currencyCombo[0], currencyCombo[1]);
+            closeConfigModal();
+            showNotice("Supabase credentials saved. Reconnecting...", "success");
+            checkAuthState();
+        });
+
+        // Initialize on page load
+        window.addEventListener("DOMContentLoaded", () => {
+            checkAuthState();
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+# Windows system & search files
+desktop.ini
+*.search-ms
+*.searchconnector-ms
+
+# Secrets & Environment variables
+.env
+.env.local
