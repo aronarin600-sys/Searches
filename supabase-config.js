@@ -18,7 +18,7 @@
 const SPACFX_DEFAULT_CONFIG = {
     // Your Supabase Project URL (from your project yhysqcialvapzajfmpkl):
     SUPABASE_URL: "https://yhysqcialvapzajfmpkl.supabase.co",
-    SUPABASE_ANON_KEY: "",
+    SUPABASE_ANON_KEY: "sb_publishable_wRcRffy9ngPoMBAq3tHU0w_9XyUa1Cg",
     
     // Reporting Currency configuration
     REPORTING_CURRENCY: "USD",
