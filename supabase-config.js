@@ -25,23 +25,19 @@ const SPACFX_DEFAULT_CONFIG = {
     REPORTING_CURRENCY_SYMBOL: "$",
 };
 
-// Allow overrides from localStorage (useful for instant browser testing without modifying code)
+// Configuration: Always uses your verified project credentials
 const getAppConfig = () => {
-    const savedUrl = localStorage.getItem("SPACFX_SUPABASE_URL");
-    const savedKey = localStorage.getItem("SPACFX_SUPABASE_ANON_KEY");
-    const savedCurrency = localStorage.getItem("SPACFX_REPORTING_CURRENCY");
-    const savedSymbol = localStorage.getItem("SPACFX_REPORTING_CURRENCY_SYMBOL");
-
-    // Prefer the valid JWT anon key if savedKey was an old sb_publishable format
-    const activeKey = (savedKey && !savedKey.startsWith("sb_publishable_")) 
-        ? savedKey 
-        : SPACFX_DEFAULT_CONFIG.SUPABASE_ANON_KEY;
+    // Verified credentials take precedence
+    const url = SPACFX_DEFAULT_CONFIG.SUPABASE_URL || localStorage.getItem("SPACFX_SUPABASE_URL") || "";
+    const key = SPACFX_DEFAULT_CONFIG.SUPABASE_ANON_KEY || localStorage.getItem("SPACFX_SUPABASE_ANON_KEY") || "";
+    const savedCurrency = localStorage.getItem("SPACFX_REPORTING_CURRENCY") || SPACFX_DEFAULT_CONFIG.REPORTING_CURRENCY || "USD";
+    const savedSymbol = localStorage.getItem("SPACFX_REPORTING_CURRENCY_SYMBOL") || SPACFX_DEFAULT_CONFIG.REPORTING_CURRENCY_SYMBOL || "$";
 
     return {
-        SUPABASE_URL: savedUrl || SPACFX_DEFAULT_CONFIG.SUPABASE_URL || "",
-        SUPABASE_ANON_KEY: activeKey || "",
-        REPORTING_CURRENCY: savedCurrency || SPACFX_DEFAULT_CONFIG.REPORTING_CURRENCY || "USD",
-        REPORTING_CURRENCY_SYMBOL: savedSymbol || SPACFX_DEFAULT_CONFIG.REPORTING_CURRENCY_SYMBOL || "$",
+        SUPABASE_URL: url,
+        SUPABASE_ANON_KEY: key,
+        REPORTING_CURRENCY: savedCurrency,
+        REPORTING_CURRENCY_SYMBOL: savedSymbol,
     };
 };
 

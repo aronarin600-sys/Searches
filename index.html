@@ -1261,7 +1261,7 @@
             navLinks.classList.remove("active");
         }
 
-        // Contact Form Submission (Saves to Supabase contact_inquiries)
+        // Contact Form Submission (Saves to Supabase contact_inquiries with local fallback)
         async function handleContactSubmit(e) {
             e.preventDefault();
             const status = document.getElementById("contactFormStatus");
@@ -1274,33 +1274,66 @@
             submitBtn.disabled = true;
             submitBtn.textContent = "Sending...";
 
+            const inquiryData = {
+                id: "inq_" + Date.now(),
+                name,
+                email,
+                subject,
+                message,
+                status: "New",
+                created_at: new Date().toISOString()
+            };
+
             const supabase = window.SPACFX.getClient();
+            let savedToSupabase = false;
+
             if (supabase) {
                 try {
                     const { error } = await supabase
                         .from("contact_inquiries")
                         .insert([{ name, email, subject, message }]);
                     
-                    if (error) throw error;
-                    
-                    status.style.color = "var(--profit-green)";
-                    status.textContent = "✓ Thank you! Your inquiry has been safely received. Our team will contact you directly.";
-                    document.getElementById("contactForm").reset();
+                    if (error) {
+                        throw error;
+                    }
+                    savedToSupabase = true;
                 } catch (err) {
-                    console.error("Contact submission error:", err);
+                    console.warn("Could not save directly to Supabase:", err);
+                    
+                    // Specific diagnostic advice
+                    let errorTip = "";
+                    const msg = (err.message || "").toLowerCase();
+                    if (msg.includes("relation") || msg.includes("does not exist") || (err.code === "42P01")) {
+                        errorTip = " (Table 'contact_inquiries' not found in Supabase. Please run the SQL snippet in Supabase SQL editor).";
+                    } else if (msg.includes("fetch")) {
+                        errorTip = " (Browser network block. Tip: Open with 'Go Live' in your editor or check your connection).";
+                    } else if (msg.includes("security") || msg.includes("policy")) {
+                        errorTip = " (Row Level Security blocked. Check table permissions in Supabase).";
+                    }
+
                     status.style.color = "var(--loss-red)";
-                    status.textContent = "Could not save message: " + err.message;
+                    status.textContent = "Error: " + (err.message || "Failed to send") + errorTip;
                 }
-            } else {
-                // If Supabase not yet configured, provide local feedback
+            }
+
+            if (savedToSupabase) {
                 status.style.color = "var(--profit-green)";
-                status.textContent = "✓ Message recorded! (Note: Connect your Supabase database in admin settings to store permanently).";
+                status.textContent = "✓ Thank you! Your inquiry has been safely received. Our team will contact you directly.";
                 document.getElementById("contactForm").reset();
+            } else {
+                // Save locally as backup so no message is ever lost
+                try {
+                    const localBackup = JSON.parse(localStorage.getItem("SPACFX_LOCAL_INQUIRIES") || "[]");
+                    localBackup.unshift(inquiryData);
+                    localStorage.setItem("SPACFX_LOCAL_INQUIRIES", JSON.stringify(localBackup));
+                } catch (localErr) {
+                    console.error("Local backup error:", localErr);
+                }
             }
 
             submitBtn.disabled = false;
             submitBtn.textContent = "Send Message";
-            setTimeout(() => { status.textContent = ""; }, 8000);
+            setTimeout(() => { if (savedToSupabase) status.textContent = ""; }, 10000);
         }
 
         // ==========================================

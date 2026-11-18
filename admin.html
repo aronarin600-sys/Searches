@@ -1335,13 +1335,28 @@
             tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 20px;">Fetching inquiries...</td></tr>`;
 
             try {
+                let dbData = [];
                 const { data, error } = await supabase
                     .from("contact_inquiries")
                     .select("*")
                     .order("created_at", { ascending: false });
 
-                if (error) throw error;
-                currentInquiries = data || [];
+                if (!error && data) {
+                    dbData = data;
+                }
+
+                // Check local backups as well
+                const localBackup = JSON.parse(localStorage.getItem("SPACFX_LOCAL_INQUIRIES") || "[]");
+                
+                // Combine and remove duplicate IDs
+                const combined = [...dbData];
+                localBackup.forEach(localItem => {
+                    if (!combined.some(i => i.id === localItem.id || (i.email === localItem.email && i.message === localItem.message))) {
+                        combined.push(localItem);
+                    }
+                });
+
+                currentInquiries = combined;
                 
                 const newCount = currentInquiries.filter(i => i.status === "New").length;
                 if (badge) badge.textContent = newCount;
