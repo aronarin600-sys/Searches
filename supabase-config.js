@@ -16,8 +16,8 @@
  */
 
 const SPACFX_DEFAULT_CONFIG = {
-    // Replace with your real Supabase credentials:
-    SUPABASE_URL: "",
+    // Your Supabase Project URL (from your project yhysqcialvapzajfmpkl):
+    SUPABASE_URL: "https://yhysqcialvapzajfmpkl.supabase.co",
     SUPABASE_ANON_KEY: "",
     
     // Reporting Currency configuration
