@@ -608,8 +608,8 @@
                         <input type="hidden" id="editReviewId" value="">
                         <div class="form-grid">
                             <div class="form-group">
-                                <label for="revStudentName">Student Name / Initial *</label>
-                                <input type="text" id="revStudentName" placeholder="e.g. David K." required>
+                                <label for="revStudentName">Student Name *</label>
+                                <input type="text" id="revStudentName" placeholder="e.g. Marcus T." required>
                             </div>
 
                             <div class="form-group">
@@ -624,8 +624,14 @@
                             </div>
 
                             <div class="form-group">
+                                <label for="revDate">Review Date</label>
+                                <input type="date" id="revDate">
+                                <span class="form-help">Date of verified completion or feedback.</span>
+                            </div>
+
+                            <div class="form-group">
                                 <label for="revLocation">Location / Cohort (Optional)</label>
-                                <input type="text" id="revLocation" placeholder="e.g. London, UK • Advanced Mentorship">
+                                <input type="text" id="revLocation" placeholder="e.g. London, UK • Advanced Cohort">
                             </div>
 
                             <div class="form-group">
@@ -636,10 +642,21 @@
                                 </select>
                             </div>
 
+                            <div class="form-group full-width" style="display: flex; gap: 24px; flex-wrap: wrap; background: rgba(255,255,255,0.02); padding: 12px 16px; border-radius: 6px; border: 1px solid var(--border-subtle);">
+                                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text-main); font-size: 0.88rem;">
+                                    <input type="checkbox" id="revAllowName" checked style="width: 16px; height: 16px; accent-color: var(--gold-primary);">
+                                    <span>Student agreed to be identified by name (uncheck to display as "Verified Student")</span>
+                                </label>
+                                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text-main); font-size: 0.88rem;">
+                                    <input type="checkbox" id="revIsVerified" checked style="width: 16px; height: 16px; accent-color: var(--gold-primary);">
+                                    <span>Confirmed Verified Mentorship Student (shows "✓ Verified" badge)</span>
+                                </label>
+                            </div>
+
                             <div class="form-group full-width">
-                                <label for="revText">Review Text *</label>
+                                <label for="revText">Student Comment / Review Text *</label>
                                 <textarea id="revText" required placeholder="Real student feedback on the mentorship curriculum, risk discipline, and live gold sessions..."></textarea>
-                                <span class="form-help">Strict policy: Never fabricate or invent student quotes or profits. Only publish real verified feedback.</span>
+                                <span class="form-help">Strict policy: Never fabricate student names, ratings, comments, or verification. Only publish genuine verified feedback.</span>
                             </div>
                         </div>
 
@@ -660,16 +677,18 @@
                             <thead>
                                 <tr>
                                     <th>Student</th>
+                                    <th>Privacy / Verification</th>
                                     <th>Rating</th>
-                                    <th>Cohort / Location</th>
-                                    <th>Review Snippet</th>
+                                    <th>Date</th>
+                                    <th>Cohort</th>
+                                    <th>Comment</th>
                                     <th>Status</th>
                                     <th style="text-align: right;">Actions</th>
                                 </tr>
                             </thead>
                             <tbody id="reviewsTableBody">
                                 <tr>
-                                    <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 30px;">
+                                    <td colspan="8" style="text-align: center; color: var(--text-muted); padding: 30px;">
                                         Loading reviews...
                                     </td>
                                 </tr>
@@ -826,9 +845,12 @@
         const reviewForm = document.getElementById("reviewForm");
         const revStudentName = document.getElementById("revStudentName");
         const revRating = document.getElementById("revRating");
+        const revDate = document.getElementById("revDate");
         const revLocation = document.getElementById("revLocation");
         const revText = document.getElementById("revText");
         const revPublication = document.getElementById("revPublication");
+        const revAllowName = document.getElementById("revAllowName");
+        const revIsVerified = document.getElementById("revIsVerified");
         const editReviewId = document.getElementById("editReviewId");
 
         let currentRecords = [];
@@ -837,6 +859,7 @@
         // Auto-set today's date in entry form
         const todayStr = new Date().toISOString().split("T")[0];
         perfDate.value = todayStr;
+        if (revDate) revDate.value = todayStr;
 
         // Auto-suggest status when P/L is typed
         perfPnl.addEventListener("input", (e) => {
@@ -1191,13 +1214,23 @@
                 tbody.innerHTML = currentReviews.map(rev => {
                     const stars = "★".repeat(rev.rating) + "☆".repeat(5 - rev.rating);
                     const pubClass = rev.publication_status === "Published" ? "pub-published" : "pub-draft";
+                    const isIdentified = rev.allow_name !== false;
+                    const isVerified = rev.is_verified !== false;
+                    const displayDate = rev.review_date || (rev.created_at ? rev.created_at.split('T')[0] : '—');
 
                     return `
                         <tr>
                             <td><strong>${rev.student_name}</strong></td>
+                            <td style="white-space: nowrap;">
+                                <span class="pub-badge" style="background: ${isIdentified ? 'rgba(16,185,129,0.15)' : 'rgba(148,163,184,0.15)'}; color: ${isIdentified ? '#86efac' : '#cbd5e1'};">
+                                    ${isIdentified ? 'Name Public' : 'Anonymous'}
+                                </span>
+                                ${isVerified ? '<span class="pub-badge" style="background: rgba(212,175,55,0.2); color: var(--gold-light); margin-left: 4px;">✓ Verified</span>' : ''}
+                            </td>
                             <td style="color: var(--gold-primary); font-size: 1.05rem;">${stars}</td>
+                            <td style="font-size: 0.8rem; color: var(--text-muted); white-space: nowrap;">${displayDate}</td>
                             <td>${rev.location_or_batch || '—'}</td>
-                            <td style="max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${rev.review_text}">
+                            <td style="max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${rev.review_text}">
                                 "${rev.review_text}"
                             </td>
                             <td><span class="pub-badge ${pubClass}">${rev.publication_status}</span></td>
@@ -1214,7 +1247,7 @@
 
             } catch (err) {
                 console.error("Error loading reviews:", err);
-                tbody.innerHTML = `<tr><td colspan="6" style="color: var(--danger); text-align: center;">Error loading reviews: ${err.message}</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="8" style="color: var(--danger); text-align: center;">Error loading reviews: ${err.message}</td></tr>`;
             }
         }
 
@@ -1226,15 +1259,21 @@
             const reviewId = editReviewId.value;
             const nameVal = revStudentName.value.trim();
             const ratingVal = parseInt(revRating.value, 10);
+            const dateVal = revDate.value || todayStr;
             const locationVal = revLocation.value.trim() || null;
             const textVal = revText.value.trim();
             const pubVal = revPublication.value;
+            const allowNameVal = revAllowName.checked;
+            const isVerifiedVal = revIsVerified.checked;
 
             const saveBtn = document.getElementById("saveReviewBtn");
             saveBtn.disabled = true;
 
             const reviewData = {
                 student_name: nameVal,
+                allow_name: allowNameVal,
+                is_verified: isVerifiedVal,
+                review_date: dateVal,
                 rating: ratingVal,
                 location_or_batch: locationVal,
                 review_text: textVal,
@@ -1259,7 +1298,30 @@
                 resetReviewForm();
                 await loadReviews();
             } catch (err) {
-                showNotice("Failed to save review: " + err.message, "error");
+                // If columns aren't in Supabase yet, try fallback without the new columns so it doesn't break
+                if (err.message && err.message.includes("column")) {
+                    try {
+                        const fallbackData = {
+                            student_name: nameVal,
+                            rating: ratingVal,
+                            location_or_batch: locationVal,
+                            review_text: textVal,
+                            publication_status: pubVal,
+                        };
+                        if (reviewId) {
+                            await supabase.from("student_reviews").update(fallbackData).eq("id", reviewId);
+                        } else {
+                            await supabase.from("student_reviews").insert([fallbackData]);
+                        }
+                        showNotice(`Review saved! (Note: run the updated SQL in Supabase to enable verified & anonymity flags).`, "success");
+                        resetReviewForm();
+                        await loadReviews();
+                    } catch (fallbackErr) {
+                        showNotice("Failed to save review: " + fallbackErr.message, "error");
+                    }
+                } else {
+                    showNotice("Failed to save review: " + err.message, "error");
+                }
             } finally {
                 saveBtn.disabled = false;
             }
@@ -1272,6 +1334,9 @@
             editReviewId.value = rev.id;
             revStudentName.value = rev.student_name;
             revRating.value = rev.rating;
+            revDate.value = rev.review_date || (rev.created_at ? rev.created_at.split('T')[0] : todayStr);
+            revAllowName.checked = rev.allow_name !== false;
+            revIsVerified.checked = rev.is_verified !== false;
             revLocation.value = rev.location_or_batch || "";
             revText.value = rev.review_text;
             revPublication.value = rev.publication_status;
@@ -1284,6 +1349,9 @@
         window.resetReviewForm = () => {
             editReviewId.value = "";
             reviewForm.reset();
+            revDate.value = todayStr;
+            revAllowName.checked = true;
+            revIsVerified.checked = true;
             document.getElementById("reviewFormHeader").textContent = "Add Student Mentorship Review";
             document.getElementById("cancelReviewEditBtn").style.display = "none";
         };

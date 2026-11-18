@@ -28,6 +28,9 @@ CREATE INDEX IF NOT EXISTS idx_daily_performance_pub ON public.daily_performance
 CREATE TABLE IF NOT EXISTS public.student_reviews (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     student_name TEXT NOT NULL,
+    allow_name BOOLEAN NOT NULL DEFAULT true, -- Show name only when student agreed to be identified
+    is_verified BOOLEAN NOT NULL DEFAULT true, -- Confirmed verified mentorship student
+    review_date DATE NULL DEFAULT CURRENT_DATE, -- Date of review
     rating INTEGER NOT NULL DEFAULT 5 CHECK (rating >= 1 AND rating <= 5),
     review_text TEXT NOT NULL,
     location_or_batch TEXT NULL,
@@ -35,6 +38,11 @@ CREATE TABLE IF NOT EXISTS public.student_reviews (
     created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
 );
+
+-- In case table was previously created, add new columns safely:
+ALTER TABLE public.student_reviews ADD COLUMN IF NOT EXISTS allow_name BOOLEAN DEFAULT true;
+ALTER TABLE public.student_reviews ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT true;
+ALTER TABLE public.student_reviews ADD COLUMN IF NOT EXISTS review_date DATE DEFAULT CURRENT_DATE;
 
 CREATE INDEX IF NOT EXISTS idx_student_reviews_pub ON public.student_reviews (publication_status);
 
