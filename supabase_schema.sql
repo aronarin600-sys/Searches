@@ -21,12 +21,10 @@ CREATE TABLE IF NOT EXISTS public.daily_performance (
     CONSTRAINT unique_trading_date UNIQUE (trading_date)
 );
 
--- Index for speedy date ordering and calendar queries
 CREATE INDEX IF NOT EXISTS idx_daily_performance_date ON public.daily_performance (trading_date DESC);
 CREATE INDEX IF NOT EXISTS idx_daily_performance_pub ON public.daily_performance (publication_status);
 
 -- 2. STUDENT REVIEWS TABLE
--- Stores mentorship reviews. Only approved/published reviews appear publicly.
 CREATE TABLE IF NOT EXISTS public.student_reviews (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     student_name TEXT NOT NULL,
@@ -40,14 +38,26 @@ CREATE TABLE IF NOT EXISTS public.student_reviews (
 
 CREATE INDEX IF NOT EXISTS idx_student_reviews_pub ON public.student_reviews (publication_status);
 
--- 3. ENABLE ROW LEVEL SECURITY (RLS)
--- Crucial: Backend-level security ensures visitors cannot insert, modify or delete data.
+-- 3. CONTACT INQUIRIES TABLE
+-- Stores messages submitted through the website's Contact Us form.
+CREATE TABLE IF NOT EXISTS public.contact_inquiries (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL,
+    email TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    message TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'New' CHECK (status IN ('New', 'Contacted', 'Archived')),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
+);
+
+CREATE INDEX IF NOT EXISTS idx_contact_inquiries_created ON public.contact_inquiries (created_at DESC);
+
+-- 4. ENABLE ROW LEVEL SECURITY (RLS)
 ALTER TABLE public.daily_performance ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.student_reviews ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.contact_inquiries ENABLE ROW LEVEL SECURITY;
 
--- 4. ROW LEVEL SECURITY POLICIES FOR DAILY PERFORMANCE
-
--- Public Visitors: Can ONLY read published records
+-- 5. ROW LEVEL SECURITY POLICIES FOR DAILY PERFORMANCE
 DROP POLICY IF EXISTS "Public can view published performance" ON public.daily_performance;
 CREATE POLICY "Public can view published performance"
 ON public.daily_performance
@@ -55,7 +65,6 @@ FOR SELECT
 TO anon, authenticated
 USING (publication_status = 'Published');
 
--- Administrators: Authenticated users have full management rights (Create, Read, Update, Delete)
 DROP POLICY IF EXISTS "Admins have full access to performance" ON public.daily_performance;
 CREATE POLICY "Admins have full access to performance"
 ON public.daily_performance
@@ -64,9 +73,7 @@ TO authenticated
 USING (true)
 WITH CHECK (true);
 
--- 5. ROW LEVEL SECURITY POLICIES FOR STUDENT REVIEWS
-
--- Public Visitors: Can ONLY view published reviews
+-- 6. ROW LEVEL SECURITY POLICIES FOR STUDENT REVIEWS
 DROP POLICY IF EXISTS "Public can view published reviews" ON public.student_reviews;
 CREATE POLICY "Public can view published reviews"
 ON public.student_reviews
@@ -74,7 +81,6 @@ FOR SELECT
 TO anon, authenticated
 USING (publication_status = 'Published');
 
--- Administrators: Full control to add, edit, approve, and delete reviews
 DROP POLICY IF EXISTS "Admins have full access to reviews" ON public.student_reviews;
 CREATE POLICY "Admins have full access to reviews"
 ON public.student_reviews
@@ -83,7 +89,25 @@ TO authenticated
 USING (true)
 WITH CHECK (true);
 
--- 6. AUTOMATIC UPDATED_AT TIMESTAMP TRIGGER
+-- 7. ROW LEVEL SECURITY POLICIES FOR CONTACT INQUIRIES
+-- Visitors can submit (INSERT) their message, but CANNOT read other visitors' messages!
+DROP POLICY IF EXISTS "Anyone can submit contact inquiry" ON public.contact_inquiries;
+CREATE POLICY "Anyone can submit contact inquiry"
+ON public.contact_inquiries
+FOR INSERT
+TO anon, authenticated
+WITH CHECK (true);
+
+-- Only authenticated administrators can view, update or delete inquiries
+DROP POLICY IF EXISTS "Admins can view and manage inquiries" ON public.contact_inquiries;
+CREATE POLICY "Admins can view and manage inquiries"
+ON public.contact_inquiries
+FOR ALL
+TO authenticated
+USING (true)
+WITH CHECK (true);
+
+-- 8. AUTOMATIC UPDATED_AT TIMESTAMP TRIGGERS
 CREATE OR REPLACE FUNCTION public.handle_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN

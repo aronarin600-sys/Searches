@@ -1261,13 +1261,45 @@
             navLinks.classList.remove("active");
         }
 
-        // Contact Form Helper
-        function handleContactSubmit(e) {
+        // Contact Form Submission (Saves to Supabase contact_inquiries)
+        async function handleContactSubmit(e) {
             e.preventDefault();
             const status = document.getElementById("contactFormStatus");
-            status.style.color = "var(--profit-green)";
-            status.textContent = "Thank you! Your message has been received. Our team will contact you directly via your official email.";
-            document.getElementById("contactForm").reset();
+            const name = document.getElementById("cName").value.trim();
+            const email = document.getElementById("cEmail").value.trim();
+            const subject = document.getElementById("cSubject").value.trim();
+            const message = document.getElementById("cMessage").value.trim();
+            const submitBtn = e.target.querySelector("button[type='submit']");
+
+            submitBtn.disabled = true;
+            submitBtn.textContent = "Sending...";
+
+            const supabase = window.SPACFX.getClient();
+            if (supabase) {
+                try {
+                    const { error } = await supabase
+                        .from("contact_inquiries")
+                        .insert([{ name, email, subject, message }]);
+                    
+                    if (error) throw error;
+                    
+                    status.style.color = "var(--profit-green)";
+                    status.textContent = "✓ Thank you! Your inquiry has been safely received. Our team will contact you directly.";
+                    document.getElementById("contactForm").reset();
+                } catch (err) {
+                    console.error("Contact submission error:", err);
+                    status.style.color = "var(--loss-red)";
+                    status.textContent = "Could not save message: " + err.message;
+                }
+            } else {
+                // If Supabase not yet configured, provide local feedback
+                status.style.color = "var(--profit-green)";
+                status.textContent = "✓ Message recorded! (Note: Connect your Supabase database in admin settings to store permanently).";
+                document.getElementById("contactForm").reset();
+            }
+
+            submitBtn.disabled = false;
+            submitBtn.textContent = "Send Message";
             setTimeout(() => { status.textContent = ""; }, 8000);
         }
 

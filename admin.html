@@ -497,6 +497,7 @@
             <div class="tabs">
                 <button class="tab-btn active" onclick="switchTab('tab-performance')">📊 Daily Performance Records</button>
                 <button class="tab-btn" onclick="switchTab('tab-reviews')">⭐ Mentorship Reviews</button>
+                <button class="tab-btn" onclick="switchTab('tab-inquiries')">📬 Contact Inquiries (<span id="inquiryCountBadge">0</span>)</button>
                 <button class="tab-btn" onclick="switchTab('tab-settings')">⚙️ Settings & SQL Guide</button>
             </div>
 
@@ -678,7 +679,40 @@
                 </div>
             </div>
 
-            <!-- TAB 3: SETTINGS & SQL SETUP -->
+            <!-- TAB 3: CONTACT INQUIRIES -->
+            <div id="tab-inquiries" class="tab-content">
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">Website Contact Inquiries</h3>
+                        <button class="btn btn-outline btn-sm" onclick="loadInquiries()">🔄 Refresh</button>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Sender</th>
+                                    <th>Email</th>
+                                    <th>Subject</th>
+                                    <th>Message</th>
+                                    <th>Status</th>
+                                    <th style="text-align: right;">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="inquiriesTableBody">
+                                <tr>
+                                    <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 30px;">
+                                        Loading inquiries...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 4: SETTINGS & SQL SETUP -->
             <div id="tab-settings" class="tab-content">
                 <div class="card">
                     <div class="card-header">
