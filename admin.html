@@ -909,6 +909,7 @@
             logoutBtn.style.display = "inline-flex";
             loadPerformanceRecords();
             loadReviews();
+            loadInquiries();
             updateCurrencyLabels();
         }
 
@@ -1317,6 +1318,100 @@
                 await loadReviews();
             } catch (err) {
                 showNotice("Error deleting review: " + err.message, "error");
+            }
+        };
+
+        // ==========================================
+        // CONTACT INQUIRIES MANAGEMENT
+        // ==========================================
+        let currentInquiries = [];
+
+        window.loadInquiries = async () => {
+            const supabase = window.SPACFX.getClient();
+            const tbody = document.getElementById("inquiriesTableBody");
+            const badge = document.getElementById("inquiryCountBadge");
+            if (!supabase || !tbody) return;
+
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 20px;">Fetching inquiries...</td></tr>`;
+
+            try {
+                const { data, error } = await supabase
+                    .from("contact_inquiries")
+                    .select("*")
+                    .order("created_at", { ascending: false });
+
+                if (error) throw error;
+                currentInquiries = data || [];
+                
+                const newCount = currentInquiries.filter(i => i.status === "New").length;
+                if (badge) badge.textContent = newCount;
+
+                if (currentInquiries.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 30px;">No messages received yet. Inquiries submitted on the website will appear here.</td></tr>`;
+                    return;
+                }
+
+                tbody.innerHTML = currentInquiries.map(item => {
+                    const dateStr = new Date(item.created_at).toLocaleString();
+                    const statusClass = item.status === "New" ? "status-loss" : (item.status === "Contacted" ? "status-profit" : "status-neutral");
+
+                    return `
+                        <tr>
+                            <td style="white-space: nowrap; font-size: 0.8rem; color: var(--text-muted);">${dateStr}</td>
+                            <td><strong>${item.name}</strong></td>
+                            <td><a href="mailto:${item.email}" style="color: var(--gold-light); text-decoration: none;">${item.email}</a></td>
+                            <td style="font-weight: 600;">${item.subject}</td>
+                            <td style="max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${item.message}">
+                                ${item.message}
+                            </td>
+                            <td><span class="status-badge ${statusClass}">${item.status}</span></td>
+                            <td style="text-align: right; white-space: nowrap;">
+                                <select onchange="updateInquiryStatus('${item.id}', this.value)" style="padding: 3px 6px; font-size: 0.76rem; background: #070a10;">
+                                    <option value="New" ${item.status === 'New' ? 'selected' : ''}>New</option>
+                                    <option value="Contacted" ${item.status === 'Contacted' ? 'selected' : ''}>Contacted</option>
+                                    <option value="Archived" ${item.status === 'Archived' ? 'selected' : ''}>Archived</option>
+                                </select>
+                                <button class="btn btn-danger btn-sm" onclick="deleteInquiry('${item.id}')" style="margin-left: 6px;">Delete</button>
+                            </td>
+                        </tr>
+                    `;
+                }).join("");
+
+            } catch (err) {
+                console.error("Error loading inquiries:", err);
+                tbody.innerHTML = `<tr><td colspan="7" style="color: var(--danger); text-align: center;">Error loading inquiries: ${err.message}</td></tr>`;
+            }
+        };
+
+        window.updateInquiryStatus = async (id, newStatus) => {
+            const supabase = window.SPACFX.getClient();
+            if (!supabase) return;
+
+            try {
+                const { error } = await supabase
+                    .from("contact_inquiries")
+                    .update({ status: newStatus })
+                    .eq("id", id);
+                if (error) throw error;
+                showNotice(`Status updated to ${newStatus}.`, "success");
+                await loadInquiries();
+            } catch (err) {
+                showNotice("Error updating status: " + err.message, "error");
+            }
+        };
+
+        window.deleteInquiry = async (id) => {
+            if (!confirm("Are you sure you want to delete this message?")) return;
+            const supabase = window.SPACFX.getClient();
+            if (!supabase) return;
+
+            try {
+                const { error } = await supabase.from("contact_inquiries").delete().eq("id", id);
+                if (error) throw error;
+                showNotice("Message deleted.", "info");
+                await loadInquiries();
+            } catch (err) {
+                showNotice("Error deleting message: " + err.message, "error");
             }
         };
 
