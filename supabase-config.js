@@ -32,9 +32,14 @@ const getAppConfig = () => {
     const savedCurrency = localStorage.getItem("SPACFX_REPORTING_CURRENCY");
     const savedSymbol = localStorage.getItem("SPACFX_REPORTING_CURRENCY_SYMBOL");
 
+    // Prefer the valid JWT anon key if savedKey was an old sb_publishable format
+    const activeKey = (savedKey && !savedKey.startsWith("sb_publishable_")) 
+        ? savedKey 
+        : SPACFX_DEFAULT_CONFIG.SUPABASE_ANON_KEY;
+
     return {
         SUPABASE_URL: savedUrl || SPACFX_DEFAULT_CONFIG.SUPABASE_URL || "",
-        SUPABASE_ANON_KEY: savedKey || SPACFX_DEFAULT_CONFIG.SUPABASE_ANON_KEY || "",
+        SUPABASE_ANON_KEY: activeKey || "",
         REPORTING_CURRENCY: savedCurrency || SPACFX_DEFAULT_CONFIG.REPORTING_CURRENCY || "USD",
         REPORTING_CURRENCY_SYMBOL: savedSymbol || SPACFX_DEFAULT_CONFIG.REPORTING_CURRENCY_SYMBOL || "$",
     };
