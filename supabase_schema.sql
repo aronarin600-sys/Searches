@@ -4,14 +4,19 @@
 -- ==============================================================================
 
 -- 1. DAILY PERFORMANCE TABLE
--- Tracks daily net realized P/L and trading metrics.
+-- Tracks daily net realized P/L and manual journal metrics.
 -- Exactly one record represents the overall result for one reporting date.
 CREATE TABLE IF NOT EXISTS public.daily_performance (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     trading_date DATE NOT NULL,
-    daily_net_pnl NUMERIC(12, 2) NOT NULL,
+    daily_net_pnl NUMERIC(12, 2) NOT NULL, -- Net realized P&L after costs
     trading_status TEXT NOT NULL CHECK (trading_status IN ('Profit', 'Loss', 'Break-even', 'No Trading')),
-    num_trades INTEGER NULL CHECK (num_trades IS NULL OR num_trades >= 0),
+    num_trades INTEGER NULL CHECK (num_trades IS NULL OR num_trades >= 0), -- Total trades
+    winning_trades INTEGER NULL CHECK (winning_trades IS NULL OR winning_trades >= 0),
+    losing_trades INTEGER NULL CHECK (losing_trades IS NULL OR losing_trades >= 0),
+    be_trades INTEGER NULL CHECK (be_trades IS NULL OR be_trades >= 0), -- Break-even trades
+    win_rate NUMERIC(5, 2) NULL, -- Manually entered win rate %
+    risk_reward TEXT NULL, -- Manually entered average R:R ratio (e.g. 1:2.5)
     market_notes TEXT NULL,
     publication_status TEXT NOT NULL DEFAULT 'Draft' CHECK (publication_status IN ('Draft', 'Published')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
@@ -20,6 +25,13 @@ CREATE TABLE IF NOT EXISTS public.daily_performance (
     -- Prevent more than one record for the same reporting date
     CONSTRAINT unique_trading_date UNIQUE (trading_date)
 );
+
+-- Safely add new columns to existing daily_performance table if already created
+ALTER TABLE public.daily_performance ADD COLUMN IF NOT EXISTS winning_trades INTEGER NULL;
+ALTER TABLE public.daily_performance ADD COLUMN IF NOT EXISTS losing_trades INTEGER NULL;
+ALTER TABLE public.daily_performance ADD COLUMN IF NOT EXISTS be_trades INTEGER NULL;
+ALTER TABLE public.daily_performance ADD COLUMN IF NOT EXISTS win_rate NUMERIC(5, 2) NULL;
+ALTER TABLE public.daily_performance ADD COLUMN IF NOT EXISTS risk_reward TEXT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_daily_performance_date ON public.daily_performance (trading_date DESC);
 CREATE INDEX IF NOT EXISTS idx_daily_performance_pub ON public.daily_performance (publication_status);
