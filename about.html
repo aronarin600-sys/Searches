@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="SPACFX — Premium Gold Trading Analysis, Disciplined Market Mentorship & Transparent Realized Daily Performance Tracking.">
+    <title>About SPACFX — Our Philosophy</title>
+
+    <!-- Theme: apply saved / system light-dark preference before first paint -->
+    <script>
+        (function () {
+            var t = null;
+            try { t = localStorage.getItem("SPACFX_THEME"); } catch (e) {}
+            if (t !== "light" && t !== "dark") {
+                t = window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+            }
+            document.documentElement.setAttribute("data-theme", t);
+        })();
+    </script>
+
+    <!-- Shared site styles (all pages) -->
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body data-page="about">
+    <div class="scroll-progress" id="scrollProgress" aria-hidden="true"></div>
+
+    <!-- Header Navigation -->
+    <header id="siteHeader">
+        <div class="container">
+            <nav>
+                <a href="index.html" class="brand-logo" aria-label="SPACFX home">
+                    <span class="logo-main">SPACFX</span>
+                    <span class="logo-sub">Market Mastery</span>
+                </a>
+
+                <div class="nav-links" id="navLinks">
+                    <a href="index.html" data-nav="home" onclick="closeMobileNav()">Home</a>
+                    <a href="about.html" data-nav="about" onclick="closeMobileNav()">About</a>
+                    <a href="performance.html" data-nav="performance" onclick="closeMobileNav()">Performance Tracker</a>
+                    <a href="index.html#mentorship" data-nav="mentorship" onclick="closeMobileNav()">Mentorship</a>
+                    <a href="index.html#reviews" data-nav="reviews" onclick="closeMobileNav()">Student Experiences</a>
+                    <a href="index.html#contact" data-nav="contact" onclick="closeMobileNav()">Contact</a>
+                    <a href="admin.html" class="btn btn-outline" style="padding: 7px 14px; font-size: 0.76rem;">Admin Portal</a>
+                </div>
+
+                <div class="nav-actions">
+                    <button class="icon-btn" id="themeToggle" type="button" aria-label="Switch light/dark theme" title="Switch light/dark theme">
+                        <svg class="theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+                        <svg class="theme-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+                    </button>
+                    <button class="mobile-menu-btn" id="mobileMenuBtn" type="button" aria-label="Toggle navigation menu" aria-expanded="false" aria-controls="navLinks">
+                        ☰
+                    </button>
+                </div>
+            </nav>
+        </div>
+    </header>
+
+    <main class="page-main">
+        <!-- About Section (Preserved & Enhanced) -->
+        <section id="about">
+            <div class="container">
+                <div class="section-header fade-up">
+                    <span class="section-tag">Our Philosophy</span>
+                    <h2>About SPACFX</h2>
+                    <p>
+                        We focus on risk-first execution, deep macroeconomic fundamentals, and mechanical consistency in the gold market.
+                    </p>
+                </div>
+
+                <div class="about-grid">
+                    <div class="card fade-up stagger-1">
+                        <div class="card-icon" aria-hidden="true">🎯</div>
+                        <h3>Disciplined Execution</h3>
+                        <p>
+                            Trading without an edge is gambling. We emphasize strict capital preservation, calculated position sizing, and emotional control on every setup.
+                        </p>
+                    </div>
+
+                    <div class="card fade-up stagger-2">
+                        <div class="card-icon" aria-hidden="true">📊</div>
+                        <h3>Complete Transparency</h3>
+                        <p>
+                            Performance is tracked by daily net realized profit and loss after trading costs. No exaggerated projections, no hidden drawdowns.
+                        </p>
+                    </div>
+
+                    <div class="card fade-up stagger-3">
+                        <div class="card-icon" aria-hidden="true">⚡</div>
+                        <h3>Market Context & Flow</h3>
+                        <p>
+                            Understanding how global interest rates, inflation indicators, and central bank liquidity impact gold intraday and swing price action.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer>
+        <div class="container">
+            <div class="footer-content">
+                <div>
+                    <span style="font-weight: 800; letter-spacing: 2px; color: var(--gold-primary);">SPACFX</span>
+                    <span style="color: var(--text-muted); font-size: 0.85rem; margin-left: 10px;">&copy; 2026. All rights reserved.</span>
+                </div>
+                <div>
+                    <a href="admin.html" class="admin-link">🔒 Administrator Portal</a>
+                </div>
+            </div>
+
+            <div class="risk-disclaimer">
+                <strong>Risk Disclosure:</strong> Trading foreign exchange and commodities such as spot gold (XAU/USD) involves significant risk of loss and is not suitable for all investors. Past performance is not indicative of future results. All daily records presented reflect net realized results and are provided for educational and analytical purposes only.
+            </div>
+        </div>
+    </footer>
+
+    <script src="supabase-config.js"></script>
+    <script src="site.js"></script>
+</body>
+</html>

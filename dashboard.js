@@ -2,12 +2,16 @@
  * ==============================================================================
  * SPACFX Trading Performance Dashboard
  * ==============================================================================
- * Everything here is calculated from the DAYS list and the HIDE_USD /
- * ALLOW_TOGGLE settings at the top of index.html. You never need to edit this
- * file to update results: just add, change or remove lines in DAYS.
+ * Results (pips, trades, R, day result) come from the records you publish in
+ * the Admin Portal (admin.html), read through get_published_performance().
  *
- * DAYS row format: ["YYYY-MM-DD", net pips, number of trades, net R, net USD]
- * A day is a "winning day" when its net pips are above zero.
+ * USD IS ADMIN-ONLY AND ENFORCED BY THE DATABASE:
+ *  - get_published_performance() returns daily_net_pnl = NULL to visitors
+ *    (unless the admin turns on public USD), and this dashboard only shows USD
+ *    after is_admin() confirms a signed-in admin.
+ *  - HIDE_USD / ALLOW_TOGGLE only affect what a verified admin sees.
+ *
+ * Day colour follows the Trading Status set in the Admin Portal.
  */
 (function () {
     "use strict";
@@ -22,32 +26,46 @@
     const REDUCED_MOTION = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
     // ------------------------------------------------------------------
-    // DATA — clean, merge same-date rows, sort, add running total
+    // PUBLIC DATA — clean, merge same-date rows, sort, add running total
     // ------------------------------------------------------------------
     const toNum = (v) => { const x = Number(v); return Number.isFinite(x) ? x : 0; };
     const round2 = (x) => Math.round(x * 100) / 100;
     const pad2 = (n) => String(n).padStart(2, "0");
 
-    const source = (typeof DAYS !== "undefined" && Array.isArray(DAYS)) ? DAYS : [];
-    const byDate = new Map();
-    source.forEach((row) => {
-        if (!Array.isArray(row)) return;
-        const date = String(row[0] || "").trim();
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
-        const d = byDate.get(date) || { date, pips: 0, trades: 0, r: 0, usd: 0 };
-        d.pips = round2(d.pips + toNum(row[1]));
-        d.trades += toNum(row[2]);
-        d.r = round2(d.r + toNum(row[3]));
-        d.usd = round2(d.usd + toNum(row[4]));
-        byDate.set(date, d);
-    });
+    // Filled from the database (published records entered in admin.html)
+    let byDate = new Map();
+    let days = [];
+    const RESULT_OF = { "Profit": "win", "Loss": "loss", "Break-even": "even" };
 
-    const days = Array.from(byDate.values()).sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
-    let running = 0;
-    days.forEach((d) => { running = round2(running + d.pips); d.cum = running; });
+    function setRecords(rows) {
+        byDate = new Map();
+        (rows || []).forEach((rec) => {
+            const date = String(rec.trading_date || "").slice(0, 10);
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
+            const result = RESULT_OF[rec.trading_status];
+            if (!result) return; // "No Trading" days are not trading days
+            byDate.set(date, {
+                date,
+                result,
+                pips: round2(toNum(rec.net_pips)),
+                trades: toNum(rec.num_trades),
+                r: round2(toNum(rec.net_r)),
+            });
+        });
+        days = Array.from(byDate.values()).sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+        let running = 0;
+        days.forEach((d) => { running = round2(running + d.pips); d.cum = running; });
+    }
 
+    // ------------------------------------------------------------------
+    // ADMIN-ONLY USD STATE (empty unless the database confirms an admin)
+    // ------------------------------------------------------------------
+    let loaded = false;   // true once the database answered
+    let isAdmin = false;
+    let usdByDate = new Map();
     let hideUsd = typeof HIDE_USD !== "undefined" ? !!HIDE_USD : false;
     const allowToggle = typeof ALLOW_TOGGLE !== "undefined" ? !!ALLOW_TOGGLE : true;
+    const usdOf = (date) => usdByDate.get(date) || 0;
 
     // ------------------------------------------------------------------
     // FORMATTING
@@ -81,8 +99,8 @@
     function computeStats() {
         const n = days.length;
         const sum = (k) => round2(days.reduce((s, d) => s + d[k], 0));
-        const winDays = days.filter((d) => d.pips > 0).length;
-        const lossDays = days.filter((d) => d.pips < 0).length;
+        const winDays = days.filter((d) => d.result === "win").length;
+        const lossDays = days.filter((d) => d.result === "loss").length;
         const winsR = days.filter((d) => d.r > 0);
         const lossesR = days.filter((d) => d.r < 0);
         const grossWon = winsR.reduce((s, d) => s + d.r, 0);
@@ -98,7 +116,6 @@
             n,
             pips: sum("pips"),
             r: sum("r"),
-            usd: sum("usd"),
             trades: sum("trades"),
             winDays,
             lossDays,
@@ -113,39 +130,46 @@
         };
     }
 
-    const S = computeStats();
+    let S = computeStats();
     let statsT = REDUCED_MOTION ? 1 : 0;
 
     function renderStats(t) {
         statsT = t;
         const el = $("tpdStats");
+        el.classList.toggle("has-usd", isAdmin);
         if (!S.n) {
-            el.innerHTML = `<div class="tpd-stat" style="grid-column: 1 / -1;"><div class="tpd-stat-label">No data yet</div><div class="tpd-stat-sub">Add lines to the DAYS list at the top of index.html.</div></div>`;
+            el.innerHTML = `<div class="tpd-stat" style="grid-column: 1 / -1;"><div class="tpd-stat-label">${loaded ? "No published days yet" : "Loading…"}</div><div class="tpd-stat-sub">${loaded ? "Results appear here once trading days are published." : "&nbsp;"}</div></div>`;
             return;
         }
         const card = (label, valueHtml, sub) =>
             `<div class="tpd-stat"><div class="tpd-stat-label">${label}</div><div class="tpd-stat-value">${valueHtml}</div><div class="tpd-stat-sub">${sub}</div></div>`;
 
-        const pips = tween(S.pips, t), r = tween(S.r, t), usd = tween(S.usd, t);
         const dayBreak = `${S.winDays}W · ${S.lossDays}L${S.evenDays ? ` · ${S.evenDays}BE` : ""}`;
         const rrText = S.rr === null ? "—" : `1:${(S.rr * Math.min(t, 1)).toFixed(2)}`;
         const pfText = S.pf === null ? "—" : (S.pf === Infinity ? "∞" : (S.pf * t).toFixed(2));
 
-        el.innerHTML = [
-            card("Net pips", `<span class="${tone(S.pips)}">${fPips(pips)}</span>`, `${plural(S.n, "trading day")}`),
-            card("Net R", `<span class="${tone(S.r)}">${fR(r)}</span>`, `avg ${fR(round2(S.r / S.n))} / day`),
-            card("Net USD", `<span class="${hideUsd ? "masked" : tone(S.usd)}">${fUsd(usd)}</span>`, hideUsd ? "Hidden" : `avg ${fUsd(round2(S.usd / S.n))} / day`),
+        const cards = [
+            card("Net pips", `<span class="${tone(S.pips)}">${fPips(tween(S.pips, t))}</span>`, plural(S.n, "trading day")),
+            card("Net R", `<span class="${tone(S.r)}">${fR(tween(S.r, t))}</span>`, `avg ${fR(round2(S.r / S.n))} / day`),
             card("Day win %", `${(S.winPct * t).toFixed(1)}%`, dayBreak),
             card("Avg R:R", rrText, `win ${num(S.avgWin, 2)}R / loss ${num(S.avgLoss, 2)}R`),
             card("Profit factor", pfText, "gross R won ÷ R lost"),
             card("Best day", `<span class="${tone(S.best.pips)}">${fPips(tween(S.best.pips, t))}</span>`, `${fDateShort(S.best.date)} · ${fR(S.best.r)}`),
             card("Worst day", `<span class="${tone(S.worst.pips)}">${fPips(tween(S.worst.pips, t))}</span>`, `${fDateShort(S.worst.date)} · ${fR(S.worst.r)}`),
             card("Total trades", String(Math.round(S.trades * t)), `${(S.trades / S.n).toFixed(1)} per day`),
-        ].join("");
+        ];
+
+        if (isAdmin) {
+            const totalUsd = round2(days.reduce((s, d) => s + usdOf(d.date), 0));
+            cards.splice(2, 0, card("Net USD",
+                `<span class="${hideUsd ? "masked" : tone(totalUsd)}">${fUsd(tween(totalUsd, t))}</span>`,
+                hideUsd ? "Hidden" : `avg ${fUsd(round2(totalUsd / S.n))} / day`));
+        }
+        el.innerHTML = cards.join("");
     }
 
     // ------------------------------------------------------------------
-    // CANVAS CHARTS
+    // CANVAS CHARTS (pips only — no USD)
     // ------------------------------------------------------------------
     const tok = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
     const FONT = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
@@ -178,7 +202,7 @@
         return ticks;
     }
 
-    // Shared frame: y-axis ticks + grid + date labels; returns scale helpers
+    // Shared frame: y-axis ticks + grid; returns scale helpers
     function frame(ctx, w, h, values) {
         const ticks = niceTicks(Math.min(0, ...values), Math.max(0, ...values), 4);
         const lo = ticks[0], hi = ticks[ticks.length - 1];
@@ -247,7 +271,6 @@
         ctx.rect(0, 0, pad.l + pw * chartP + 3, h);
         ctx.clip();
 
-        // Soft filled area (accent → transparent toward the zero line)
         const grad = ctx.createLinearGradient(0, pad.t, 0, base);
         grad.addColorStop(0, hexA(accent, 0.28));
         grad.addColorStop(1, hexA(accent, 0.02));
@@ -259,7 +282,6 @@
         ctx.fillStyle = grad;
         ctx.fill();
 
-        // Line
         ctx.beginPath();
         days.forEach((d, i) => (i ? ctx.lineTo(x(i), y(d.cum)) : ctx.moveTo(x(i), y(d.cum))));
         ctx.strokeStyle = accent;
@@ -269,10 +291,8 @@
         ctx.stroke();
         ctx.restore();
 
-        // End-point marker once fully drawn
         if (chartP >= 1) dot(ctx, x(n - 1), y(days[n - 1].cum), accent);
 
-        // Hover crosshair + marker
         const hi = hover.cum;
         if (hi >= 0 && hi < n) {
             const hx = x(hi), hy = y(days[hi].cum);
@@ -305,10 +325,9 @@
         const y0 = y(0);
         days.forEach((d, i) => {
             if (!d.pips) return;
-            const v = d.pips * ease;
             ctx.globalAlpha = hover.bar >= 0 && hover.bar !== i ? 0.4 : 1;
             ctx.fillStyle = d.pips > 0 ? up : down;
-            roundedBar(ctx, cx(i) - bw / 2, y0, bw, y(v), Math.min(4, bw / 2));
+            roundedBar(ctx, cx(i) - bw / 2, y0, bw, y(d.pips * ease), Math.min(4, bw / 2));
         });
         ctx.globalAlpha = 1;
     }
@@ -349,7 +368,6 @@
         ctx.fill();
     }
 
-    // "#a78bfa" + alpha → rgba(); falls back to the original string
     function hexA(hex, a) {
         const m = /^#?([0-9a-f]{6})$/i.exec(hex);
         if (!m) return hex;
@@ -363,12 +381,11 @@
     }
 
     function chartMeta() {
-        if (!days.length) return;
+        if (!days.length) { $("tpdCumMeta").textContent = ""; $("tpdBarMeta").textContent = ""; return; }
         $("tpdCumMeta").innerHTML = `Total <b class="${tone(S.pips)}">${fPips(S.pips)}</b> pips`;
         $("tpdBarMeta").textContent = `${S.winDays} up · ${S.lossDays} down`;
     }
 
-    // Tooltips
     function placeTip(tip, cv, px, py) {
         const bw = cv.clientWidth, bh = cv.clientHeight;
         const tw = tip.offsetWidth, th = tip.offsetHeight;
@@ -377,6 +394,12 @@
         left = Math.max(0, left);
         const top = Math.max(0, Math.min(bh - th, py - th - 12));
         tip.style.transform = `translate(${Math.round(left)}px, ${Math.round(top)}px)`;
+    }
+
+    function hideTips() {
+        hover.cum = hover.bar = -1;
+        $("tpdCumTip").classList.remove("show");
+        $("tpdBarTip").classList.remove("show");
     }
 
     function bindHover(cv, tip, key, indexAt, describe) {
@@ -390,8 +413,7 @@
             const g = geom[key];
             if (!g) return;
             const rect = cv.getBoundingClientRect();
-            const px = e.clientX - rect.left;
-            const i = indexAt(g, px);
+            const i = indexAt(g, e.clientX - rect.left);
             if (i < 0 || i >= days.length) { if (hover[key] !== -1) clear(); return; }
             if (hover[key] !== i) {
                 hover[key] = i;
@@ -418,13 +440,18 @@
 
     bindHover($("tpdBarChart"), $("tpdBarTip"), "bar",
         (g, px) => Math.floor((px - g.pad.l) / g.slot),
-        (d) => `<strong>${fDateDow(d.date)}</strong><span class="${tone(d.pips)}">${fPips(d.pips)}</span> pips · <span class="${tone(d.r)}">${fR(d.r)}</span><br>${plural(d.trades, "trade")} · ${usdHtml(d.usd)}`);
+        (d) => `<strong>${fDateDow(d.date)}</strong><span class="${tone(d.pips)}">${fPips(d.pips)}</span> pips · <span class="${tone(d.r)}">${fR(d.r)}</span><br>${plural(d.trades, "trade")}` +
+            (isAdmin ? ` · ${usdHtml(usdOf(d.date))}` : ""));
 
     // ------------------------------------------------------------------
-    // MONTHLY CALENDAR
+    // MONTHLY CALENDAR (main journal view)
     // ------------------------------------------------------------------
-    const anchor = days.length ? days[days.length - 1].date : todayStr;
-    const view = { y: +anchor.slice(0, 4), m: +anchor.slice(5, 7) - 1 };
+    const view = { y: now.getFullYear(), m: now.getMonth() };
+    function jumpToLatest() {
+        const anchor = days.length ? days[days.length - 1].date : todayStr;
+        view.y = +anchor.slice(0, 4);
+        view.m = +anchor.slice(5, 7) - 1;
+    }
 
     function renderCalendar() {
         const { y, m } = view;
@@ -434,12 +461,15 @@
         const inMonth = days.filter((d) => d.date.startsWith(prefix));
         const mp = round2(inMonth.reduce((s, d) => s + d.pips, 0));
         const mr = round2(inMonth.reduce((s, d) => s + d.r, 0));
-        const mu = round2(inMonth.reduce((s, d) => s + d.usd, 0));
-        $("tpdMonthSum").innerHTML =
+        let sumHtml =
             `<span>Pips <b class="${tone(mp)}">${fPips(mp)}</b></span>` +
-            `<span>R <b class="${tone(mr)}">${fR(mr)}</b></span>` +
-            `<span>USD <b>${usdHtml(mu)}</b></span>` +
-            `<span>Trading days <b>${inMonth.length}</b></span>`;
+            `<span>R <b class="${tone(mr)}">${fR(mr)}</b></span>`;
+        if (isAdmin) {
+            const mu = round2(inMonth.reduce((s, d) => s + usdOf(d.date), 0));
+            sumHtml += `<span>USD <b>${usdHtml(mu)}</b></span>`;
+        }
+        sumHtml += `<span>Trading days <b>${inMonth.length}</b></span>`;
+        $("tpdMonthSum").innerHTML = sumHtml;
 
         let html = DOW.map((d) => `<div class="tpd-dow">${d}</div>`).join("") + `<div class="tpd-dow wk">Week</div>`;
         const startOffset = new Date(y, m, 1).getDay();
@@ -448,7 +478,7 @@
 
         for (let first = 1 - startOffset; first <= dim; first += 7) {
             week++;
-            const wk = { pips: 0, r: 0, usd: 0, n: 0, trades: 0 };
+            const wk = { pips: 0, r: 0, usd: 0, n: 0 };
             for (let k = 0; k < 7; k++, i++) {
                 const dn = first + k;
                 if (dn < 1 || dn > dim) { html += `<div class="tpd-day out" aria-hidden="true"></div>`; continue; }
@@ -459,22 +489,23 @@
                     html += `<div class="tpd-day none${today}" style="--i:${i}"><span class="dnum">${dn}</span></div>`;
                     continue;
                 }
-                wk.pips += d.pips; wk.r += d.r; wk.usd += d.usd; wk.n++; wk.trades += d.trades;
-                const cls = d.pips > 0 ? "win" : d.pips < 0 ? "loss" : "even";
+                wk.pips += d.pips; wk.r += d.r; wk.n++;
+                if (isAdmin) wk.usd += usdOf(ds);
+                const cls = d.result;
                 html += `<div class="tpd-day ${cls}${today}" style="--i:${i}" title="${fDateFull(ds)}">` +
                     `<span class="dnum">${dn}</span>` +
-                    `<span class="dpips ${tone(d.pips)}">${fPips(d.pips)}</span>` +
-                    `<span class="dmeta">${fR(d.r)} · ${plural(d.trades, "trade")}</span>` +
-                    `<span class="dusd">${usdHtml(d.usd)}</span>` +
+                    `<span class="dpips ${tone(d.pips)}">${fPips(d.pips)}<small>pips</small></span>` +
+                    `<span class="dmeta"><span class="dr">${fR(d.r)}</span><span class="dt">${d.trades}<span class="dt-w"> trade${d.trades === 1 ? "" : "s"}</span><span class="dt-s"> tr</span></span></span>` +
+                    (isAdmin ? `<span class="dusd">${usdHtml(usdOf(ds))}</span>` : "") +
                     `</div>`;
             }
             wk.pips = round2(wk.pips); wk.r = round2(wk.r); wk.usd = round2(wk.usd);
             html += `<div class="tpd-week" style="--i:${i}"><span class="wlabel">Week ${week}</span>` +
                 (wk.n
-                    ? `<span class="wpips ${tone(wk.pips)}">${fPips(wk.pips)}</span>` +
+                    ? `<span class="wpips ${tone(wk.pips)}">${fPips(wk.pips)}<small>pips</small></span>` +
                       `<span class="wmeta">${fR(wk.r)} · ${plural(wk.n, "day")}</span>` +
-                      `<span>${usdHtml(wk.usd)}</span>`
-                    : `<span class="wmeta">—</span>`) +
+                      (isAdmin ? `<span>${usdHtml(wk.usd)}</span>` : "")
+                    : `<span class="wmeta">No trading</span>`) +
                 `</div>`;
         }
         $("tpdCal").innerHTML = html;
@@ -491,69 +522,103 @@
     $("tpdNext").addEventListener("click", () => shiftMonth(1));
 
     // ------------------------------------------------------------------
-    // RECENT DAYS TABLE
+    // HEADER: date range + admin-only USD controls
     // ------------------------------------------------------------------
-    const TABLE_LIMIT = 10;
-    let showAll = false;
-
-    function renderTable() {
-        const list = days.slice().reverse();
-        const shown = showAll ? list : list.slice(0, TABLE_LIMIT);
-        $("tpdTableBody").innerHTML = shown.length
-            ? shown.map((d) =>
-                `<tr><td>${fDateFull(d.date)}</td>` +
-                `<td class="${tone(d.pips)}">${fPips(d.pips)}</td>` +
-                `<td class="${tone(d.r)}">${fR(d.r)}</td>` +
-                `<td>${usdHtml(d.usd)}</td>` +
-                `<td class="${tone(d.cum)}">${fPips(d.cum)}</td></tr>`).join("")
-            : `<tr><td colspan="5" style="text-align:center; color: var(--text-muted);">No days entered yet.</td></tr>`;
-
-        $("tpdTableMeta").textContent = list.length ? `Showing ${shown.length} of ${list.length}` : "";
-        const more = $("tpdMore");
-        more.hidden = list.length <= TABLE_LIMIT;
-        more.textContent = showAll ? "Show fewer days" : `Show all ${list.length} days`;
+    function renderRange() {
+        $("tpdRange").textContent = days.length
+            ? `${fDateShort(days[0].date)}, ${days[0].date.slice(0, 4)} – ${fDateShort(days[days.length - 1].date)}, ${days[days.length - 1].date.slice(0, 4)} · ${plural(days.length, "trading day")}`
+            : (loaded ? "No published days yet" : "Loading…");
     }
 
-    $("tpdMore").addEventListener("click", () => { showAll = !showAll; renderTable(); });
-
-    // ------------------------------------------------------------------
-    // HEADER: date range + USD toggle
-    // ------------------------------------------------------------------
-    $("tpdRange").textContent = days.length
-        ? `${fDateShort(days[0].date)}, ${days[0].date.slice(0, 4)} – ${fDateShort(days[days.length - 1].date)}, ${days[days.length - 1].date.slice(0, 4)} · ${plural(days.length, "trading day")}`
-        : "No days entered yet";
-
     const toggle = $("tpdUsdToggle");
-    function syncToggle() {
+    function syncAdminTools() {
+        $("tpdAdminTools").hidden = !isAdmin;
+        toggle.hidden = !(isAdmin && allowToggle);
         $("tpdUsdToggleText").textContent = hideUsd ? "Show USD" : "Hide USD";
         toggle.setAttribute("aria-pressed", String(hideUsd));
     }
-    if (allowToggle) {
-        toggle.hidden = false;
-        syncToggle();
-        toggle.addEventListener("click", () => {
-            hideUsd = !hideUsd;
-            syncToggle();
-            renderStats(statsT);
-            renderCalendar();
-            renderTable();
-            // Close any open tooltip so it can't show a stale USD value
-            hover.cum = hover.bar = -1;
-            $("tpdCumTip").classList.remove("show");
-            $("tpdBarTip").classList.remove("show");
-            drawCharts();
-        });
+    toggle.addEventListener("click", () => {
+        if (!isAdmin || !allowToggle) return;
+        hideUsd = !hideUsd;
+        syncAdminTools();
+        rerender();
+    });
+
+    function rerender() {
+        hideTips();
+        renderRange();
+        renderStats(statsT);
+        chartMeta();
+        renderCalendar();
+        drawCharts();
+    }
+
+    // ------------------------------------------------------------------
+    // ADMIN CHECK — the database decides; the page only asks
+    // ------------------------------------------------------------------
+    function setPublicMode() {
+        if (!isAdmin && usdByDate.size === 0) return;
+        isAdmin = false;
+        usdByDate = new Map();
+        hideUsd = typeof HIDE_USD !== "undefined" ? !!HIDE_USD : false;
+        syncAdminTools();
+        rerender();
+    }
+
+    // Loads published days (pips, R, trades, status) for everyone. USD is used only
+    // after the database confirms an admin; get_published_performance() withholds
+    // amounts from everyone else.
+    let checkSeq = 0;
+    async function loadData() {
+        const seq = ++checkSeq;
+        const supabase = window.SPACFX && window.SPACFX.getClient ? window.SPACFX.getClient() : null;
+        if (!supabase) { loaded = true; rerender(); return; }
+        try {
+            const { data: rows, error } = await supabase.rpc("get_published_performance");
+            if (seq !== checkSeq) return;
+            if (error) throw error;
+            const first = !loaded;
+            setRecords(rows);
+            S = computeStats();
+            loaded = true;
+            if (first) jumpToLatest();
+
+            let admin = false;
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session) {
+                const res = await supabase.rpc("is_admin");
+                if (seq !== checkSeq) return;
+                admin = !res.error && res.data === true;
+            }
+            if (admin) {
+                usdByDate = new Map((rows || [])
+                    .filter((r) => r.daily_net_pnl !== null && r.daily_net_pnl !== undefined)
+                    .map((r) => [String(r.trading_date).slice(0, 10), toNum(r.daily_net_pnl)]));
+                isAdmin = true;
+            } else {
+                isAdmin = false;
+                usdByDate = new Map();
+                hideUsd = typeof HIDE_USD !== "undefined" ? !!HIDE_USD : false;
+            }
+            syncAdminTools();
+            rerender();
+        } catch (err) {
+            console.warn("SPACFX dashboard: could not load published days.", err && err.message ? err.message : err);
+            loaded = true;
+            setPublicMode();
+            rerender();
+        }
     }
 
     // ------------------------------------------------------------------
     // ENTRANCE ANIMATIONS (count-up stats, chart draw-in)
     // ------------------------------------------------------------------
-    function animate(duration, step, done) {
+    function animate(duration, step) {
         const t0 = performance.now();
         const frameFn = (t) => {
             const p = Math.min(1, (t - t0) / duration);
             step(1 - Math.pow(1 - p, 3));
-            if (p < 1) requestAnimationFrame(frameFn); else if (done) done();
+            if (p < 1) requestAnimationFrame(frameFn);
         };
         requestAnimationFrame(frameFn);
     }
@@ -566,12 +631,13 @@
         io.observe(el);
     }
 
-    // Initial render
+    // Initial render ("Loading…"); data arrives from loadData()
+    syncAdminTools();
+    renderRange();
     renderStats(statsT);
     chartMeta();
     drawCharts();
     renderCalendar();
-    renderTable();
 
     onFirstView($("tpdStats"), () => {
         if (REDUCED_MOTION) { renderStats(1); return; }
@@ -583,11 +649,19 @@
         animate(1200, (t) => { chartP = t; drawCharts(); });
     });
 
-    // Redraw charts on resize and theme change
+    // Admin detection: now, and whenever the sign-in state changes (e.g. logout in admin.html)
+    loadData();
+    try {
+        const client = window.SPACFX && window.SPACFX.getClient ? window.SPACFX.getClient() : null;
+        if (client) client.auth.onAuthStateChange(() => { setTimeout(loadData, 0); });
+    } catch (e) { /* auth listener is optional */ }
+
     let resizeTimer;
     window.addEventListener("resize", () => {
         clearTimeout(resizeTimer);
         resizeTimer = setTimeout(drawCharts, 100);
     });
     document.addEventListener("spacfx:themechange", drawCharts);
+    // The dashboard starts collapsed on performance.html; size the charts once it is opened
+    document.addEventListener("spacfx:dashboardshown", () => requestAnimationFrame(drawCharts));
 })();

@@ -84,3 +84,23 @@ You can preview the site immediately without installing any web servers:
 1. Open File Explorer to `C:\Users\User\Searches`.
 2. **Public Website:** Double-click [index.html](file:///c:/Users/User/Searches/index.html) to open it in your browser.
 3. **Administrator Dashboard:** Double-click [admin.html](file:///c:/Users/User/Searches/admin.html) to manage your daily records and reviews.
+
+---
+
+## 5. Performance Dashboard: Public Results & Admin-Only USD
+
+* **Where the data comes from:** the dashboard on `performance.html` uses the records you **publish** in the Admin Portal (`admin.html` › Performance). For each day, fill in **Net Pips** and **Net R for the Day** (both optional) along with the P&L and status. Draft records are never shown.
+* **Day colour:** follows the Trading Status you choose (Profit = green, Loss = red, Break-even = blue). "No Trading" days are not counted.
+* **USD (admins only):** the database function `get_published_performance()` withholds amounts from visitors, and the dashboard only shows USD after `is_admin()` confirms you are signed in as an admin.
+* **One-time upgrade:** run the pips/R upgrade SQL (the `ALTER TABLE ... net_pips` / `net_r` lines and the new `get_published_performance()` in [supabase_schema.sql](supabase_schema.sql)) in the Supabase SQL Editor.
+
+---
+
+## 6. Site Pages, Official Links & Public USD Visibility
+
+* **Pages:** `index.html` (Home), `about.html` (Our Philosophy / About SPACFX), `performance.html` (Daily Performance Tracker, plus the Performance Dashboard behind a "View Performance Dashboard" button). Shared styles live in `styles.css`; shared behaviour (navigation, theme, animations) in `site.js`.
+* **Contact & social icons (Home page):** paste each official `https://` link into `OFFICIAL_LINKS` at the top of `index.html`. An icon appears only when its link is filled in.
+* **Public USD P&L on the Daily Performance page:**
+  1. Run section 10 of [supabase_schema.sql](supabase_schema.sql) **after** adding your login to `admin_users` (step 9e). From then on, only allowlisted admins can read or edit `daily_performance` directly.
+  2. In `admin.html` › Daily Performance Records, use **Public USD P&L Visibility** to show or hide amounts. While hidden, visitors see `$•••`. Days keep their colours: green profit, red loss, blue break-even.
+  3. The database returns amounts only when the switch is on (or to an admin), so hidden amounts are never sent to visitors.

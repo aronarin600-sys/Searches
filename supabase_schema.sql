@@ -32,6 +32,8 @@ ALTER TABLE public.daily_performance ADD COLUMN IF NOT EXISTS losing_trades INTE
 ALTER TABLE public.daily_performance ADD COLUMN IF NOT EXISTS be_trades INTEGER NULL;
 ALTER TABLE public.daily_performance ADD COLUMN IF NOT EXISTS win_rate NUMERIC(5, 2) NULL;
 ALTER TABLE public.daily_performance ADD COLUMN IF NOT EXISTS risk_reward TEXT NULL;
+ALTER TABLE public.daily_performance ADD COLUMN IF NOT EXISTS net_pips NUMERIC(10, 1) NULL; -- net pips for the day (e.g. 85 or -40)
+ALTER TABLE public.daily_performance ADD COLUMN IF NOT EXISTS net_r NUMERIC(8, 2) NULL;     -- net R for the day (e.g. 1.5 or -1)
 
 CREATE INDEX IF NOT EXISTS idx_daily_performance_date ON public.daily_performance (trading_date DESC);
 CREATE INDEX IF NOT EXISTS idx_daily_performance_pub ON public.daily_performance (publication_status);
@@ -147,3 +149,152 @@ CREATE TRIGGER set_student_reviews_timestamp
     BEFORE UPDATE ON public.student_reviews
     FOR EACH ROW
     EXECUTE FUNCTION public.handle_updated_at();
+
+-- ==============================================================================
+-- 9. ADMIN ALLOWLIST + ADMIN-ONLY USD FOR THE PERFORMANCE DASHBOARD
+-- ==============================================================================
+-- The public dashboard on performance.html shows pips, R and trades entered in
+-- admin.html. USD amounts are only returned to admins by get_published_performance()
+-- (or to everyone when the admin turns on show_public_usd).
+-- Being signed in is not enough: a member/other authenticated user gets 0 rows.
+
+-- 9a. Who counts as an admin
+CREATE TABLE IF NOT EXISTS public.admin_users (
+    user_id UUID PRIMARY KEY REFERENCES auth.users (id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
+);
+ALTER TABLE public.admin_users ENABLE ROW LEVEL SECURITY;
+-- No policies on purpose: nobody can read or edit this list through the API.
+REVOKE ALL ON TABLE public.admin_users FROM anon, authenticated;
+
+-- 9b. is_admin(): true only for the signed-in user if they are on the allowlist
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS BOOLEAN
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+    SELECT EXISTS (SELECT 1 FROM public.admin_users WHERE user_id = auth.uid());
+$$;
+REVOKE ALL ON FUNCTION public.is_admin() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.is_admin() TO anon, authenticated;
+
+-- 9c. The old sample-only "dashboard_usd" table is no longer used. The dashboard
+-- now reads USD from daily_performance (admins only, via get_published_performance).
+DROP TABLE IF EXISTS public.dashboard_usd;
+
+-- 9e. MAKE YOURSELF AN ADMIN — replace the email below with your admin login, then run:
+-- INSERT INTO public.admin_users (user_id)
+-- SELECT id FROM auth.users WHERE email = 'your-admin-email@example.com'
+-- ON CONFLICT DO NOTHING;
+
+-- ==============================================================================
+-- 10. ADMIN-CONTROLLED PUBLIC USD P&L ON THE DAILY PERFORMANCE PAGE
+-- ==============================================================================
+-- Requires section 9 (admin_users + is_admin()).
+-- !! BEFORE RUNNING: add your admin login to public.admin_users (step 9e).
+-- !! From this section on, only allowlisted admins can read or edit
+-- !! daily_performance directly, including in admin.html.
+--
+-- How it works:
+--   * site_settings.show_public_usd is the switch the admin flips in admin.html.
+--   * The public page never reads daily_performance directly. It calls
+--     get_published_performance(), which returns daily_net_pnl = NULL unless the
+--     switch is on (or the caller is an admin). Day status is always returned,
+--     so the calendar keeps its profit / loss / break-even colours.
+
+-- 10a. Single-row settings table
+CREATE TABLE IF NOT EXISTS public.site_settings (
+    id SMALLINT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+    show_public_usd BOOLEAN NOT NULL DEFAULT false,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
+);
+INSERT INTO public.site_settings (id, show_public_usd) VALUES (1, false)
+ON CONFLICT (id) DO NOTHING;
+
+ALTER TABLE public.site_settings ENABLE ROW LEVEL SECURITY;
+REVOKE INSERT, DELETE, TRUNCATE ON TABLE public.site_settings FROM anon, authenticated;
+
+DROP POLICY IF EXISTS "Anyone can read site settings" ON public.site_settings;
+CREATE POLICY "Anyone can read site settings"
+ON public.site_settings
+FOR SELECT
+TO anon, authenticated
+USING (true);
+
+DROP POLICY IF EXISTS "Only admins can change site settings" ON public.site_settings;
+CREATE POLICY "Only admins can change site settings"
+ON public.site_settings
+FOR UPDATE
+TO authenticated
+USING (public.is_admin())
+WITH CHECK (public.is_admin());
+
+DROP TRIGGER IF EXISTS set_site_settings_timestamp ON public.site_settings;
+CREATE TRIGGER set_site_settings_timestamp
+    BEFORE UPDATE ON public.site_settings
+    FOR EACH ROW
+    EXECUTE FUNCTION public.handle_updated_at();
+
+-- 10b. No direct public reads of daily_performance (amounts live in this table)
+DROP POLICY IF EXISTS "Public can view published performance" ON public.daily_performance;
+DROP POLICY IF EXISTS "Admins have full access to performance" ON public.daily_performance;
+DROP POLICY IF EXISTS "Only admins can manage performance" ON public.daily_performance;
+CREATE POLICY "Only admins can manage performance"
+ON public.daily_performance
+FOR ALL
+TO authenticated
+USING (public.is_admin())
+WITH CHECK (public.is_admin());
+
+-- 10c. Public read path: amounts only when the admin allows it
+-- (DROP first: the returned columns changed when net_pips / net_r were added)
+DROP FUNCTION IF EXISTS public.get_published_performance();
+CREATE FUNCTION public.get_published_performance()
+RETURNS TABLE (
+    id UUID,
+    trading_date DATE,
+    daily_net_pnl NUMERIC,
+    trading_status TEXT,
+    num_trades INTEGER,
+    winning_trades INTEGER,
+    losing_trades INTEGER,
+    be_trades INTEGER,
+    win_rate NUMERIC,
+    risk_reward TEXT,
+    net_pips NUMERIC,
+    net_r NUMERIC,
+    market_notes TEXT,
+    amounts_visible BOOLEAN
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+    WITH v AS (
+        SELECT COALESCE((SELECT s.show_public_usd FROM public.site_settings s WHERE s.id = 1), false)
+               OR public.is_admin() AS visible
+    )
+    SELECT p.id,
+           p.trading_date,
+           CASE WHEN v.visible THEN p.daily_net_pnl ELSE NULL END,
+           p.trading_status,
+           p.num_trades,
+           p.winning_trades,
+           p.losing_trades,
+           p.be_trades,
+           p.win_rate,
+           p.risk_reward,
+           p.net_pips,
+           p.net_r,
+           p.market_notes,
+           v.visible
+    FROM public.daily_performance p
+    CROSS JOIN v
+    WHERE p.publication_status = 'Published'
+    ORDER BY p.trading_date ASC;
+$$;
+REVOKE ALL ON FUNCTION public.get_published_performance() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.get_published_performance() TO anon, authenticated;
