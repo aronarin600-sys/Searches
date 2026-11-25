@@ -333,7 +333,35 @@ function initButtonPop() {
     });
 }
 
+// ==========================================
+// ADMIN-ONLY LINKS
+// Links marked data-admin-only stay hidden for everyone. They appear only when
+// the database confirms the signed-in user is on the admin allowlist (is_admin()).
+// ==========================================
+function initAdminOnlyLinks() {
+    const links = document.querySelectorAll("[data-admin-only]");
+    if (!links.length) return;
+    const show = (on) => links.forEach((a) => { a.hidden = !on; });
+    const client = window.SPACFX && window.SPACFX.getClient ? window.SPACFX.getClient() : null;
+    if (!client) return;
+    let seq = 0;
+    const check = async () => {
+        const mine = ++seq;
+        try {
+            const { data: { session } } = await client.auth.getSession();
+            if (!session) { if (mine === seq) show(false); return; }
+            const { data, error } = await client.rpc("is_admin");
+            if (mine === seq) show(!error && data === true);
+        } catch (e) {
+            if (mine === seq) show(false);
+        }
+    };
+    check();
+    try { client.auth.onAuthStateChange(() => setTimeout(check, 0)); } catch (e) { /* optional */ }
+}
+
 window.addEventListener("DOMContentLoaded", () => {
+    initAdminOnlyLinks();
     initSiteChrome();
     initScrollAnimations();
     initBackground3D();

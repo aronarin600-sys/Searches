@@ -40,7 +40,7 @@
                     <a href="index.html#mentorship" data-nav="mentorship" onclick="closeMobileNav()">Mentorship</a>
                     <a href="index.html#reviews" data-nav="reviews" onclick="closeMobileNav()">Student Experiences</a>
                     <a href="index.html#contact" data-nav="contact" onclick="closeMobileNav()">Contact</a>
-                    <a href="admin.html" class="btn btn-outline" style="padding: 7px 14px; font-size: 0.76rem;">Admin Portal</a>
+                    <a href="admin.html" data-admin-only hidden class="btn btn-outline" style="padding: 7px 14px; font-size: 0.76rem;">Admin Portal</a>
                 </div>
 
                 <div class="nav-actions">
@@ -106,7 +106,7 @@
                     <span style="color: var(--text-muted); font-size: 0.85rem; margin-left: 10px;">&copy; 2026. All rights reserved.</span>
                 </div>
                 <div>
-                    <a href="admin.html" class="admin-link">🔒 Administrator Portal</a>
+                    <a href="admin.html" data-admin-only hidden class="admin-link">🔒 Administrator Portal</a>
                 </div>
             </div>
 
@@ -116,6 +116,7 @@
         </div>
     </footer>
 
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="supabase-config.js"></script>
     <script src="site.js"></script>
 </body>
