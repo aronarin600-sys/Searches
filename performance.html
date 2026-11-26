@@ -91,9 +91,9 @@
                 <!-- Dynamic Metrics Grid -->
                 <div class="metrics-grid">
                     <div class="metric-card fade-up stagger-1">
-                        <div class="metric-label">Total Net Realized P/L</div>
+                        <div class="metric-label">Total Return</div>
                         <div class="metric-value" id="metricTotalPnl">—</div>
-                        <div class="metric-sub" id="metricPnlSub">From verified published records</div>
+                        <div class="metric-sub" id="metricPnlSub">Compounded since start</div>
                     </div>
 
                     <div class="metric-card fade-up stagger-2">
@@ -156,7 +156,7 @@
                                 <span id="detailStatus" style="font-weight: 700;">Status</span>
                             </div>
                             <div style="margin-bottom: 6px;">
-                                Net Realized P/L: <strong id="detailPnl" style="font-size: 1.05rem;">—</strong>
+                                Daily Return: <strong id="detailPnl" style="font-size: 1.05rem;">—</strong>
                             </div>
                             <div id="detailTradesWrapper" style="margin-bottom: 6px; color: var(--text-muted);">
                                 Executed Trades: <span id="detailTrades">—</span>
@@ -172,7 +172,7 @@
                         <div class="chart-header">
                             <div>
                                 <h3 class="chart-title">Cumulative Performance</h3>
-                                <p style="color: var(--text-dim); font-size: 0.78rem;">Cumulative net realized growth over recorded dates</p>
+                                <p style="color: var(--text-dim); font-size: 0.78rem;">Compounded % growth of the trading account</p>
                             </div>
                         </div>
                         <div class="canvas-container">
@@ -225,6 +225,7 @@
     
                         <div class="tpd-stack">
                             <!-- 2. Performance summary -->
+                            <div class="tpd-stats tpd-returns" id="tpdReturns" aria-label="Account returns"></div>
                             <div class="tpd-stats" id="tpdStats"></div>
     
                             <!-- 3. Charts -->

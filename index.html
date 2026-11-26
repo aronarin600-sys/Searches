@@ -183,9 +183,9 @@
                 <!-- Dynamic Metrics Grid -->
                 <div class="metrics-grid">
                     <div class="metric-card fade-up stagger-1">
-                        <div class="metric-label">Total Net Realized P/L</div>
+                        <div class="metric-label">Total Return</div>
                         <div class="metric-value" id="metricTotalPnl">—</div>
-                        <div class="metric-sub" id="metricPnlSub">From verified published records</div>
+                        <div class="metric-sub" id="metricPnlSub">Compounded since start</div>
                     </div>
 
                     <div class="metric-card fade-up stagger-2">
@@ -248,7 +248,7 @@
                                 <span id="detailStatus" style="font-weight: 700;">Status</span>
                             </div>
                             <div style="margin-bottom: 6px;">
-                                Net Realized P/L: <strong id="detailPnl" style="font-size: 1.05rem;">—</strong>
+                                Daily Return: <strong id="detailPnl" style="font-size: 1.05rem;">—</strong>
                             </div>
                             <div id="detailTradesWrapper" style="margin-bottom: 6px; color: var(--text-muted);">
                                 Executed Trades: <span id="detailTrades">—</span>
@@ -264,7 +264,7 @@
                         <div class="chart-header">
                             <div>
                                 <h3 class="chart-title">Cumulative Performance</h3>
-                                <p style="color: var(--text-dim); font-size: 0.78rem;">Cumulative net realized growth over recorded dates</p>
+                                <p style="color: var(--text-dim); font-size: 0.78rem;">Compounded % growth of the trading account</p>
                             </div>
                         </div>
                         <div class="canvas-container">
@@ -369,6 +369,51 @@
                     <p style="max-width: 520px; margin: 0 auto; color: var(--text-muted);">
                         Genuine experiences and verified feedback from our mentorship graduates will appear here once approved. Please check back soon!
                     </p>
+                </div>
+
+                <!-- Visitor review form: saved as a draft; appears only after admin approval -->
+                <div class="review-submit-wrap fade-up">
+                    <button class="btn btn-outline" id="openReviewFormBtn" type="button" aria-expanded="false" aria-controls="visitorReviewCard">★ Write a Review</button>
+                </div>
+                <div class="review-form-card" id="visitorReviewCard" hidden>
+                    <h3>Share Your Experience</h3>
+                    <p class="rf-intro">Your review is sent to SPACFX for approval and appears on the website once it is approved.</p>
+                    <form id="visitorReviewForm" novalidate>
+                        <div class="rf-field">
+                            <label id="vrStarsLabel">Your rating *</label>
+                            <div class="star-input" id="vrStars" role="radiogroup" aria-labelledby="vrStarsLabel">
+                                <button type="button" role="radio" data-v="1" aria-label="1 star" aria-checked="false">★</button>
+                                <button type="button" role="radio" data-v="2" aria-label="2 stars" aria-checked="false">★</button>
+                                <button type="button" role="radio" data-v="3" aria-label="3 stars" aria-checked="false">★</button>
+                                <button type="button" role="radio" data-v="4" aria-label="4 stars" aria-checked="false">★</button>
+                                <button type="button" role="radio" data-v="5" aria-label="5 stars" aria-checked="false">★</button>
+                            </div>
+                        </div>
+                        <div class="rf-row">
+                            <div class="rf-field">
+                                <label for="vrName">Your name *</label>
+                                <input type="text" id="vrName" maxlength="60" autocomplete="name" placeholder="e.g. Marcus T.">
+                            </div>
+                            <div class="rf-field">
+                                <label for="vrLocation">Location / course (optional)</label>
+                                <input type="text" id="vrLocation" maxlength="80" placeholder="e.g. London • Mentorship">
+                            </div>
+                        </div>
+                        <div class="rf-field">
+                            <label for="vrText">Your review *</label>
+                            <textarea id="vrText" maxlength="1200" placeholder="What was your experience with SPACFX?"></textarea>
+                        </div>
+                        <div class="rf-field">
+                            <label class="rf-check"><input type="checkbox" id="vrShowName" checked> Show my name with the review</label>
+                        </div>
+                        <!-- Spam trap: real visitors never see or fill this -->
+                        <div class="rf-hp" aria-hidden="true"><label for="vrWebsite">Website</label><input type="text" id="vrWebsite" tabindex="-1" autocomplete="off"></div>
+                        <div class="rf-actions">
+                            <button type="button" class="btn btn-outline" id="vrCancel">Cancel</button>
+                            <button type="submit" class="btn" id="vrSubmit">Submit Review</button>
+                        </div>
+                        <div class="rf-status" id="vrStatus" role="status"></div>
+                    </form>
                 </div>
 
             </div>
@@ -567,6 +612,91 @@
             setTimeout(() => { if (savedToSupabase) status.textContent = ""; }, 10000);
         }
 
+        // Escape text from the database before putting it in the page
+        function escapeHtml(s) {
+            return String(s == null ? "" : s)
+                .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+        }
+
+        // ==========================================
+        // VISITOR REVIEW FORM — saved as Draft, published only after admin approval
+        // ==========================================
+        function initVisitorReviewForm() {
+            const openBtn = document.getElementById("openReviewFormBtn");
+            const card = document.getElementById("visitorReviewCard");
+            const form = document.getElementById("visitorReviewForm");
+            const status = document.getElementById("vrStatus");
+            const starBtns = Array.from(document.querySelectorAll("#vrStars button"));
+            if (!openBtn || !card || !form) return;
+            let rating = 0;
+
+            const paintStars = (n) => starBtns.forEach((b) => {
+                const on = Number(b.dataset.v) <= n;
+                b.classList.toggle("on", on);
+                b.setAttribute("aria-checked", String(Number(b.dataset.v) === rating));
+            });
+            starBtns.forEach((b) => {
+                b.addEventListener("click", () => { rating = Number(b.dataset.v); paintStars(rating); });
+                b.addEventListener("mouseenter", () => paintStars(Number(b.dataset.v)));
+                b.addEventListener("mouseleave", () => paintStars(rating));
+            });
+
+            const setOpen = (open) => {
+                card.hidden = !open;
+                openBtn.setAttribute("aria-expanded", String(open));
+                if (open) card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+            };
+            openBtn.addEventListener("click", () => setOpen(card.hidden));
+            document.getElementById("vrCancel").addEventListener("click", () => setOpen(false));
+
+            form.addEventListener("submit", async (e) => {
+                e.preventDefault();
+                const name = document.getElementById("vrName").value.trim();
+                const text = document.getElementById("vrText").value.trim();
+                const location = document.getElementById("vrLocation").value.trim();
+                const showName = document.getElementById("vrShowName").checked;
+                const trap = document.getElementById("vrWebsite").value;
+                const say = (msg, ok) => { status.textContent = msg; status.style.color = ok ? "var(--profit-green)" : "var(--loss-red)"; };
+
+                if (trap) { say("Thank you! Your review was sent for approval.", true); form.reset(); return; }
+                if (!rating) return say("Please choose a star rating.");
+                if (name.length < 2) return say("Please enter your name.");
+                if (text.length < 10) return say("Please write at least a few words (10+ characters).");
+
+                const supabase = window.SPACFX.getClient();
+                if (!supabase) return say("Reviews can't be sent right now. Please try again later.");
+
+                const btn = document.getElementById("vrSubmit");
+                btn.disabled = true;
+                btn.textContent = "Sending...";
+                try {
+                    const { error } = await supabase.from("student_reviews").insert([{
+                        student_name: name,
+                        allow_name: showName,
+                        is_verified: false,
+                        rating,
+                        review_text: text,
+                        location_or_batch: location || null,
+                        review_date: new Date().toISOString().slice(0, 10),
+                        publication_status: "Draft",
+                        submitted_by_visitor: true,
+                    }]);
+                    if (error) throw error;
+                    form.reset();
+                    rating = 0;
+                    paintStars(0);
+                    say("Thank you! Your review was sent and will appear once it is approved.", true);
+                } catch (err) {
+                    console.warn("Review not sent:", err);
+                    say("Sorry, your review could not be sent. Please try again later.");
+                } finally {
+                    btn.disabled = false;
+                    btn.textContent = "Submit Review";
+                }
+            });
+        }
+
         // ==========================================
         // STUDENT REVIEWS LOADING (REAL RECORDS ONLY)
         // ==========================================
@@ -601,10 +731,11 @@
                 emptyState.style.display = "none";
 
                 slider.innerHTML = data.map((rev, idx) => {
-                    const stars = "★".repeat(rev.rating) + "☆".repeat(5 - rev.rating);
+                    const r = Math.max(1, Math.min(5, parseInt(rev.rating, 10) || 5));
+                    const stars = "★".repeat(r) + "☆".repeat(5 - r);
                     const isIdentified = rev.allow_name !== false;
-                    const displayName = (isIdentified && rev.student_name) ? rev.student_name : "Mentorship Graduate";
-                    const displayAvatar = (isIdentified && rev.student_name) ? rev.student_name.charAt(0).toUpperCase() : "M";
+                    const displayName = escapeHtml((isIdentified && rev.student_name) ? rev.student_name : "Mentorship Graduate");
+                    const displayAvatar = escapeHtml((isIdentified && rev.student_name) ? rev.student_name.charAt(0).toUpperCase() : "M");
                     const isVerified = rev.is_verified !== false;
 
                     let reviewDateStr = "";
@@ -629,7 +760,7 @@
                                     <div class="review-stars">${stars}</div>
                                     ${isVerified ? '<span class="review-verified-pill">✓ Verified</span>' : ''}
                                 </div>
-                                <p class="review-quote">"${rev.review_text}"</p>
+                                <p class="review-quote">"${escapeHtml(rev.review_text)}"</p>
                             </div>
                             <div class="review-author">
                                 <div class="review-avatar">${displayAvatar}</div>
@@ -638,7 +769,7 @@
                                         <h5>${displayName}</h5>
                                         ${reviewDateStr ? `<span style="font-size: 0.72rem; color: var(--text-dim);">${reviewDateStr}</span>` : ''}
                                     </div>
-                                    <span>${rev.location_or_batch || (isIdentified ? 'Mentorship Graduate' : 'Verified Community Member')}</span>
+                                    <span>${escapeHtml(rev.location_or_batch || (isIdentified ? 'Mentorship Graduate' : (isVerified ? 'Verified Community Member' : 'Community Member')))}</span>
                                 </div>
                             </div>
                         </div>
@@ -751,6 +882,7 @@
             renderHeroAppIcons();
             renderConnectIcons();
             fetchReviews();
+            initVisitorReviewForm();
         });
     </script>
 </body>

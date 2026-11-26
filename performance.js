@@ -3,21 +3,56 @@
  * SPACFX — Daily Performance Tracker (performance.html)
  * ==============================================================================
  * Records are read through the database function get_published_performance().
- * The DATABASE decides whether USD P&L amounts are included:
- *   - amounts are returned only when an admin has switched on public display
- *     (site_settings.show_public_usd), or when the viewer is an allowlisted admin;
- *   - otherwise daily_net_pnl comes back as NULL, so there is nothing in the
- *     browser for a visitor to reveal.
- * Day status (Profit / Loss / Break-even / No Trading) is always public, so the
- * calendar keeps its green / red / blue colours in both modes.
- * See supabase_schema.sql, section 10.
+ *   - Everyone receives the day status, pips and the daily % (daily_pct), which
+ *     the DATABASE calculates from the private capital and P&L.
+ *   - USD P&L and balances are returned only to allowlisted admins; for anyone
+ *     else daily_net_pnl comes back as NULL, so there is nothing to reveal.
+ * Day status (Profit / Loss / Break-even / No Trading) keeps the calendar's
+ * green / red / blue colours. See supabase_schema.sql, section 11.
  */
 
 let publishedRecords = [];
 let viewDate = new Date(); // Current viewing month for calendar
-let amountsVisible = false; // set only from the server response
+let amountsVisible = false; // true only for verified admins (set from the server response)
 let viewerIsAdmin = false;
-let publicUsdEnabled = false;
+
+// ==========================================
+// PERCENTAGE HELPERS (shared with dashboard.js)
+// All % figures compound the database's daily % values; no USD is needed.
+// ==========================================
+function pctOf(rec) {
+    const v = rec ? rec.daily_pct : null;
+    return (v === null || v === undefined || v === "") ? null : Number(v);
+}
+// Compounded return of a list of daily % values, e.g. [5, 2, -1] -> 6.029
+function compoundPct(pcts) {
+    let g = 1;
+    pcts.forEach((p) => { if (p !== null && Number.isFinite(p)) g *= 1 + p / 100; });
+    return (g - 1) * 100;
+}
+// Largest fall from a peak of the compounded growth curve (positive number)
+function maxDrawdownPct(pcts) {
+    let g = 1, peak = 1, worst = 0;
+    pcts.forEach((p) => {
+        if (p === null || !Number.isFinite(p)) return;
+        g *= 1 + p / 100;
+        if (g > peak) peak = g;
+        worst = Math.max(worst, (peak - g) / peak);
+    });
+    return worst * 100;
+}
+function fmtPct(v, digits = 2) {
+    if (v === null || v === undefined || !Number.isFinite(v)) return "—";
+    const r = Math.abs(v) < 0.005 ? 0 : v;
+    return (r > 0 ? "+" : r < 0 ? "−" : "") + Math.abs(r).toFixed(digits) + "%";
+}
+function pctColor(v) {
+    if (v === null || !Number.isFinite(v)) return "var(--text-muted)";
+    return v > 0.0049 ? "var(--profit-green)" : (v < -0.0049 ? "var(--loss-red)" : "var(--text-main)");
+}
+function hasAnyPct() {
+    return publishedRecords.some((r) => pctOf(r) !== null);
+}
 
 const MASK = "•••";
 const STATUS_CLASS = {
@@ -90,10 +125,10 @@ async function fetchPerformanceData() {
             document.getElementById("performanceEmptyState").style.display = "none";
             const area = document.getElementById("performanceInteractiveArea");
             area.style.display = "grid";
-            area.classList.toggle("amounts-hidden", !amountsVisible);
+            area.classList.remove("amounts-hidden");
             calculateAndDisplayMetrics();
             renderCalendar();
-            if (amountsVisible) drawEquityChart();
+            drawEquityChart();
         }
     } catch (err) {
         console.warn("Could not load performance records:", err.message);
@@ -101,15 +136,11 @@ async function fetchPerformanceData() {
     }
 }
 
-// Who is viewing, and what does the public currently see? (for the small status note)
+// Who is viewing? (for the small status note)
 async function loadVisibilityInfo(supabase) {
     try {
-        const [{ data: admin }, { data: setting }] = await Promise.all([
-            supabase.rpc("is_admin"),
-            supabase.from("site_settings").select("show_public_usd").eq("id", 1).maybeSingle(),
-        ]);
+        const { data: admin } = await supabase.rpc("is_admin");
         viewerIsAdmin = admin === true;
-        publicUsdEnabled = !!(setting && setting.show_public_usd);
     } catch (e) {
         viewerIsAdmin = false;
     }
@@ -119,12 +150,12 @@ async function loadVisibilityInfo(supabase) {
 function renderVisibilityNote() {
     const note = document.getElementById("perfVisibilityNote");
     if (!note) return;
-    if (viewerIsAdmin) {
+    if (viewerIsAdmin && amountsVisible) {
         note.innerHTML = `<span class="pill">Admin view</span>` +
-            `<span>You can see amounts. Public visitors currently see ${publicUsdEnabled ? "the USD amounts" : `<strong>${currencySymbol()}${MASK}</strong>`}. Change this in the <a href="admin.html" style="color: var(--gold-light);">Admin Portal</a>.</span>`;
+            `<span>You see USD and %. Visitors see only percentages and pips.</span>`;
         note.hidden = false;
-    } else if (!amountsVisible && publishedRecords.length) {
-        note.innerHTML = `<span>P&amp;L amounts are private. Each day's colour shows its result.</span>`;
+    } else if (publishedRecords.length) {
+        note.innerHTML = `<span>Results are shown as a percentage of the trading account. Each day's colour shows its result.</span>`;
         note.hidden = false;
     } else {
         note.hidden = true;
@@ -157,12 +188,18 @@ function calculateAndDisplayMetrics() {
     const totalDays = publishedRecords.length;
     const winRate = totalDays > 0 ? ((profitDays / totalDays) * 100).toFixed(1) : "0.0";
 
-    // Total PnL (masked unless the database returned amounts)
+    // Total return % (compounded). Admins also see the USD total underneath.
     const totalPnlEl = document.getElementById("metricTotalPnl");
-    totalPnlEl.textContent = fmtAmount(amountsVisible ? totalPnl : null);
-    totalPnlEl.classList.toggle("amount-masked", !amountsVisible);
-    totalPnlEl.style.color = !amountsVisible ? "var(--text-muted)"
-        : (totalPnl > 0 ? "var(--profit-green)" : (totalPnl < 0 ? "var(--loss-red)" : "var(--text-main)"));
+    const totalRet = hasAnyPct() ? compoundPct(publishedRecords.map(pctOf)) : null;
+    totalPnlEl.textContent = fmtPct(totalRet);
+    totalPnlEl.classList.remove("amount-masked");
+    totalPnlEl.style.color = pctColor(totalRet);
+    const subEl = document.getElementById("metricPnlSub");
+    if (subEl) {
+        subEl.textContent = amountsVisible
+            ? `Admin: ${window.SPACFX.formatCurrency(totalPnl, true)} net P/L`
+            : (totalRet === null ? "Available once the account capital is set" : "Compounded since start");
+    }
 
     document.getElementById("metricWinRate").textContent = `${winRate}%`;
 
@@ -220,10 +257,19 @@ function renderCalendar() {
             cell.title = `${dateStr}: ${status}`;
             cell.setAttribute("aria-label", `${dateStr}: ${status}`);
 
-            const pnlDiv = document.createElement("div");
-            pnlDiv.className = "cal-day-pnl" + (amountsVisible ? "" : " amount-masked");
-            pnlDiv.textContent = fmtAmount(record.daily_net_pnl);
-            cell.appendChild(pnlDiv);
+            // Daily % for everyone; admins also see the USD amount
+            const pct = pctOf(record);
+            const pctDiv = document.createElement("div");
+            pctDiv.className = "cal-day-pnl cal-day-pct";
+            pctDiv.textContent = fmtPct(pct);
+            pctDiv.style.color = pct === null ? "" : pctColor(pct);
+            cell.appendChild(pctDiv);
+            if (amountsVisible) {
+                const usdDiv = document.createElement("div");
+                usdDiv.className = "cal-day-usd";
+                usdDiv.textContent = fmtAmount(record.daily_net_pnl);
+                cell.appendChild(usdDiv);
+            }
 
             cell.addEventListener("click", () => showDayDetail(record));
         }
@@ -258,7 +304,10 @@ function showDayDetail(record) {
     statusEl.style.color = STATUS_COLOR[status];
 
     const pnlEl = document.getElementById("detailPnl");
-    pnlEl.textContent = fmtAmount(record.daily_net_pnl);
+    const pct = pctOf(record);
+    pnlEl.textContent = amountsVisible
+        ? `${fmtPct(pct)}  (${fmtAmount(record.daily_net_pnl)})`
+        : fmtPct(pct);
     pnlEl.style.color = STATUS_COLOR[status];
 
     document.getElementById("detailTrades").textContent = record.num_trades !== null && record.num_trades !== undefined ? record.num_trades : "Not specified";
@@ -266,11 +315,11 @@ function showDayDetail(record) {
 }
 
 // ==========================================
-// CUMULATIVE EQUITY CURVE (only drawn when amounts are public)
+// CUMULATIVE PERFORMANCE CURVE — compounded % growth (no USD; public)
 // ==========================================
 function drawEquityChart() {
     const canvas = document.getElementById("equityChart");
-    if (!canvas || !amountsVisible) return;
+    if (!canvas) return;
 
     const ctx = canvas.getContext("2d");
     const rect = canvas.parentElement.getBoundingClientRect();
@@ -285,20 +334,25 @@ function drawEquityChart() {
 
     ctx.clearRect(0, 0, width, height);
 
-    if (publishedRecords.length < 2) {
+    const noCurve = (msg) => {
         ctx.fillStyle = cssVar("--text-dim");
         ctx.font = "13px -apple-system, sans-serif";
         ctx.textAlign = "center";
-        ctx.fillText("Need at least 2 published days for a curve.", width / 2, height / 2);
-        return;
-    }
+        ctx.fillText(msg, width / 2, height / 2);
+    };
+    if (!hasAnyPct()) { noCurve("Percentages appear once the account capital is set."); return; }
 
-    let runningPnl = 0;
-    const dataPoints = [];
+    // Start at 0% (the starting capital), then compound each day's %
+    let growth = 1;
+    const dataPoints = [{ date: null, value: 0 }];
     publishedRecords.forEach(rec => {
-        runningPnl += parseFloat(rec.daily_net_pnl) || 0;
-        dataPoints.push({ date: rec.trading_date, value: runningPnl });
+        const p = pctOf(rec);
+        if (p !== null && Number.isFinite(p)) growth *= 1 + p / 100;
+        dataPoints.push({ date: rec.trading_date, value: (growth - 1) * 100 });
     });
+    if (dataPoints.length < 2) { noCurve("Need at least 1 published day for a curve."); return; }
+    const summary = document.getElementById("chartSummary");
+    if (summary) summary.textContent = `Total compounded return: ${fmtPct(dataPoints[dataPoints.length - 1].value)} · ${dataPoints.length - 1} trading day${dataPoints.length === 2 ? "" : "s"}`;
 
     const padding = { top: 30, right: 30, bottom: 40, left: 60 };
     const plotWidth = width - padding.left - padding.right;
@@ -362,16 +416,16 @@ function drawEquityChart() {
     ctx.fillStyle = cssVar("--chart-axis");
     ctx.font = "11px -apple-system, sans-serif";
     ctx.textAlign = "right";
-    ctx.fillText(window.SPACFX.formatCurrency(maxVal), padding.left - 8, padding.top + 4);
-    ctx.fillText(window.SPACFX.formatCurrency(minVal), padding.left - 8, height - padding.bottom);
+    ctx.fillText(fmtPct(maxVal), padding.left - 8, padding.top + 4);
+    ctx.fillText(fmtPct(minVal), padding.left - 8, height - padding.bottom);
     if (minVal < 0 && maxVal > 0) {
-        ctx.fillText(window.SPACFX.formatCurrency(0), padding.left - 8, zeroY + 4);
+        ctx.fillText("0%", padding.left - 8, zeroY + 4);
     }
 }
 
 let equityResizeTimer;
 function redrawEquityIfVisible() {
-    if (publishedRecords.length > 0 && amountsVisible) drawEquityChart();
+    if (publishedRecords.length > 0) drawEquityChart();
 }
 window.addEventListener("resize", () => {
     clearTimeout(equityResizeTimer);

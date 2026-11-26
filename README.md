@@ -104,3 +104,13 @@ You can preview the site immediately without installing any web servers:
   1. Run section 10 of [supabase_schema.sql](supabase_schema.sql) **after** adding your login to `admin_users` (step 9e). From then on, only allowlisted admins can read or edit `daily_performance` directly.
   2. In `admin.html` › Daily Performance Records, use **Public USD P&L Visibility** to show or hide amounts. While hidden, visitors see `$•••`. Days keep their colours: green profit, red loss, blue break-even.
   3. The database returns amounts only when the switch is on (or to an admin), so hidden amounts are never sent to visitors.
+
+---
+
+## 7. Percentage Tracking & Visitor Reviews
+
+* **One-time setup:** run [supabase_percent_upgrade.sql](supabase_percent_upgrade.sql) in the Supabase SQL Editor. The last table it shows is a self-test (capital 100,000: +5,000 → +5.00%, +2,100 → +2.00%, −1,071 → −1.00%, and no USD for logged-out visitors). Every row should say **PASS**. The test data is rolled back automatically.
+* **Admin Portal › Daily Performance Records:** set **Starting Capital** once (editable). Add **Deposit / Withdrawal** entries separately; they change the balance but never count as profit or loss.
+* **How % is calculated (in the database):** daily % = that day's P/L ÷ balance at the start of the day. Weekly, monthly and total returns compound the daily %. Max drawdown is the largest fall from a peak of the compounded growth. Only **Published** days count.
+* **Who sees what:** visitors see only percentages and pips. Admins also see USD P/L, start balance, capital and current balance.
+* **Visitor reviews:** visitors can submit a star review on the Home page. It is saved as "Awaiting approval" and appears only after you click **✓ Approve & Publish** in the Admin Portal's Reviews tab.

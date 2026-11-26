@@ -37,11 +37,45 @@
     let days = [];
     const RESULT_OF = { "Profit": "win", "Loss": "loss", "Break-even": "even" };
 
+    // Daily % for every published date (from the database; includes "No Trading" days)
+    let pctByDate = new Map();
+    const pctList = (dates) => dates.map((ds) => (pctByDate.has(ds) ? pctByDate.get(ds) : null));
+    const anyPct = () => Array.from(pctByDate.values()).some((v) => v !== null);
+    const pctTone = (v) => (v > 0.0049 ? "pos" : v < -0.0049 ? "neg" : "flat");
+
+    // Return cards: Total return %, This month %, Max drawdown % (from daily % only)
+    function renderReturns(t) {
+        const el = $("tpdReturns");
+        if (!el) return;
+        if (!loaded) { el.innerHTML = ""; return; }
+        const allDates = Array.from(pctByDate.keys()).sort();
+        const has = anyPct();
+        const k = Math.min(t, 1);
+        const card = (label, valueHtml, sub) =>
+            `<div class="tpd-stat tpd-ret"><div class="tpd-stat-label">${label}</div><div class="tpd-stat-value">${valueHtml}</div><div class="tpd-stat-sub">${sub}</div></div>`;
+        if (!has) {
+            el.innerHTML = card("Total return", "—", allDates.length ? "Shown once the account capital is set" : "No published days yet");
+            return;
+        }
+        const total = compoundPct(pctList(allDates));
+        const monthPrefix = todayStr.slice(0, 7);
+        const monthDates = allDates.filter((ds) => ds.startsWith(monthPrefix));
+        const month = monthDates.length ? compoundPct(pctList(monthDates)) : 0;
+        const dd = maxDrawdownPct(pctList(allDates));
+        el.innerHTML = [
+            card("Total return", `<span class="${pctTone(total)}">${fmtPct(total * k)}</span>`, `Compounded · ${plural(allDates.length, "day")}`),
+            card("This month", `<span class="${pctTone(month)}">${fmtPct(month * k)}</span>`, `${MONTHS[+monthPrefix.slice(5, 7) - 1]} ${monthPrefix.slice(0, 4)} · ${plural(monthDates.length, "day")}`),
+            card("Max drawdown", `<span class="${dd > 0.0049 ? "neg" : "flat"}">${dd > 0.0049 ? fmtPct(-dd * k) : "0.00%"}</span>`, "Largest fall from a peak"),
+        ].join("");
+    }
+
     function setRecords(rows) {
         byDate = new Map();
+        pctByDate = new Map();
         (rows || []).forEach((rec) => {
             const date = String(rec.trading_date || "").slice(0, 10);
             if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
+            pctByDate.set(date, pctOf(rec));
             const result = RESULT_OF[rec.trading_status];
             if (!result) return; // "No Trading" days are not trading days
             byDate.set(date, {
@@ -50,6 +84,7 @@
                 pips: round2(toNum(rec.net_pips)),
                 trades: toNum(rec.num_trades),
                 r: round2(toNum(rec.net_r)),
+                pct: pctOf(rec),
             });
         });
         days = Array.from(byDate.values()).sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
@@ -135,6 +170,7 @@
 
     function renderStats(t) {
         statsT = t;
+        renderReturns(t);
         const el = $("tpdStats");
         el.classList.toggle("has-usd", isAdmin);
         if (!S.n) {
@@ -461,7 +497,10 @@
         const inMonth = days.filter((d) => d.date.startsWith(prefix));
         const mp = round2(inMonth.reduce((s, d) => s + d.pips, 0));
         const mr = round2(inMonth.reduce((s, d) => s + d.r, 0));
+        const monthDates = Array.from(pctByDate.keys()).filter((ds) => ds.startsWith(prefix));
+        const mPct = anyPct() && monthDates.length ? compoundPct(pctList(monthDates)) : null;
         let sumHtml =
+            (mPct !== null ? `<span>Return <b class="${pctTone(mPct)}">${fmtPct(mPct)}</b></span>` : "") +
             `<span>Pips <b class="${tone(mp)}">${fPips(mp)}</b></span>` +
             `<span>R <b class="${tone(mr)}">${fR(mr)}</b></span>`;
         if (isAdmin) {
@@ -478,11 +517,12 @@
 
         for (let first = 1 - startOffset; first <= dim; first += 7) {
             week++;
-            const wk = { pips: 0, r: 0, usd: 0, n: 0 };
+            const wk = { pips: 0, r: 0, usd: 0, n: 0, dates: [] };
             for (let k = 0; k < 7; k++, i++) {
                 const dn = first + k;
                 if (dn < 1 || dn > dim) { html += `<div class="tpd-day out" aria-hidden="true"></div>`; continue; }
                 const ds = `${prefix}-${pad2(dn)}`;
+                if (pctByDate.has(ds)) wk.dates.push(ds);
                 const d = byDate.get(ds);
                 const today = ds === todayStr ? " today" : "";
                 if (!d) {
@@ -495,14 +535,17 @@
                 html += `<div class="tpd-day ${cls}${today}" style="--i:${i}" title="${fDateFull(ds)}">` +
                     `<span class="dnum">${dn}</span>` +
                     `<span class="dpips ${tone(d.pips)}">${fPips(d.pips)}<small>pips</small></span>` +
+                    (d.pct !== null ? `<span class="dpct ${pctTone(d.pct)}">${fmtPct(d.pct)}</span>` : "") +
                     `<span class="dmeta"><span class="dr">${fR(d.r)}</span><span class="dt">${d.trades}<span class="dt-w"> trade${d.trades === 1 ? "" : "s"}</span><span class="dt-s"> tr</span></span></span>` +
                     (isAdmin ? `<span class="dusd">${usdHtml(usdOf(ds))}</span>` : "") +
                     `</div>`;
             }
             wk.pips = round2(wk.pips); wk.r = round2(wk.r); wk.usd = round2(wk.usd);
+            const wPct = anyPct() && wk.dates.length ? compoundPct(pctList(wk.dates)) : null;
             html += `<div class="tpd-week" style="--i:${i}"><span class="wlabel">Week ${week}</span>` +
                 (wk.n
                     ? `<span class="wpips ${tone(wk.pips)}">${fPips(wk.pips)}<small>pips</small></span>` +
+                      (wPct !== null ? `<span class="wpct ${pctTone(wPct)}">${fmtPct(wPct)}</span>` : "") +
                       `<span class="wmeta">${fR(wk.r)} · ${plural(wk.n, "day")}</span>` +
                       (isAdmin ? `<span>${usdHtml(wk.usd)}</span>` : "")
                     : `<span class="wmeta">No trading</span>`) +

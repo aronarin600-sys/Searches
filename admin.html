@@ -212,6 +212,30 @@
             letter-spacing: 0.5px;
         }
 
+        /* Account capital & balance */
+        .acct-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 12px;
+            margin-bottom: 18px;
+        }
+        .acct-stat {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.07);
+            border-radius: 8px;
+            padding: 12px 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .acct-stat span { font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text-muted); }
+        .acct-stat strong { font-size: 1.08rem; color: var(--text-main); white-space: nowrap; }
+        .acct-form { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
+        .acct-form .form-group { flex: 1 1 240px; }
+        .pct-pos, .acct-stat strong.pct-pos { color: #10b981; font-weight: 700; }
+        .pct-neg, .acct-stat strong.pct-neg { color: #ef4444; font-weight: 700; }
+        .pct-flat, .acct-stat strong.pct-flat { color: var(--text-muted); font-weight: 700; }
+
         /* Forms */
         .form-grid {
             display: grid;
@@ -509,7 +533,7 @@
             <div class="tabs">
                 <button class="tab-btn active" onclick="switchTab('tab-performance')">📊 Daily Performance
                     Records</button>
-                <button class="tab-btn" onclick="switchTab('tab-reviews')">⭐ Mentorship Reviews</button>
+                <button class="tab-btn" onclick="switchTab('tab-reviews')">⭐ Mentorship Reviews<span id="pendingReviewBadge"></span></button>
                 <button class="tab-btn" onclick="switchTab('tab-inquiries')">📬 Contact Inquiries (<span
                         id="inquiryCountBadge">0</span>)</button>
                 <button class="tab-btn" onclick="switchTab('tab-settings')">⚙️ Settings & SQL Guide</button>
@@ -518,19 +542,78 @@
             <!-- TAB 1: DAILY PERFORMANCE TRACKER -->
             <div id="tab-performance" class="tab-content active">
 
-                <!-- Public USD P&L visibility (enforced by the database: site_settings + RLS) -->
-                <div class="card" id="publicUsdCard">
+                <!-- Account capital & balance (admin-only; the public only ever sees %) -->
+                <div class="card" id="capitalCard">
                     <div class="card-header">
-                        <h3 class="card-title">Public USD P&amp;L Visibility</h3>
-                        <span id="publicUsdStatus" style="font-weight: 700; font-size: 0.9rem; color: var(--text-muted);">Checking…</span>
+                        <h3 class="card-title">Account Capital &amp; Balance</h3>
+                        <span style="font-size: 0.82rem; color: var(--text-muted);">🔒 Private — visitors only see % and pips</span>
                     </div>
-                    <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 14px;">
-                        When hidden, visitors see "•••" instead of USD amounts on the Daily Performance page. Each day keeps its colour
-                        (green profit, red loss, blue break-even). The database enforces this, so hidden amounts are never sent to visitors.
-                        Only admins on the allowlist can change this setting.
-                    </p>
-                    <button class="btn btn-sm" id="publicUsdToggleBtn" type="button" disabled>Loading…</button>
-                    <div id="publicUsdHint" style="font-size: 0.82rem; color: var(--text-muted); margin-top: 10px;"></div>
+
+                    <div class="acct-stats" id="acctStats">
+                        <div class="acct-stat"><span>Starting capital</span><strong id="acctCapital">—</strong></div>
+                        <div class="acct-stat"><span>Net P/L (published)</span><strong id="acctPnl">—</strong></div>
+                        <div class="acct-stat"><span>Deposits / withdrawals</span><strong id="acctFlows">—</strong></div>
+                        <div class="acct-stat"><span>Current balance</span><strong id="acctBalance">—</strong></div>
+                        <div class="acct-stat"><span>Total return</span><strong id="acctReturn">—</strong></div>
+                        <div class="acct-stat"><span>This month</span><strong id="acctMonth">—</strong></div>
+                        <div class="acct-stat"><span>Max drawdown</span><strong id="acctDrawdown">—</strong></div>
+                    </div>
+
+                    <form id="capitalForm" class="acct-form">
+                        <div class="form-group" style="margin: 0;">
+                            <label for="startingCapital">Starting Capital (<span class="currencyLabel">USD</span>) *</label>
+                            <input type="number" step="0.01" min="1" id="startingCapital" placeholder="e.g. 100000" required>
+                        </div>
+                        <button type="submit" class="btn btn-sm" id="saveCapitalBtn">💾 Save Capital</button>
+                    </form>
+                    <div class="form-help" id="capitalHint" style="margin-top: 10px;">
+                        Daily % = that day's P/L ÷ balance at the start of the day. Only <strong>Published</strong> days count; drafts are not counted until you publish them.
+                    </div>
+                </div>
+
+                <!-- Deposits / withdrawals: change the balance but are never counted as profit or loss -->
+                <div class="card" id="flowsCard">
+                    <div class="card-header">
+                        <h3 class="card-title">Deposit / Withdrawal</h3>
+                        <span style="font-size: 0.82rem; color: var(--text-muted);">Not counted as profit or loss</span>
+                    </div>
+                    <form id="flowForm">
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label for="flowDate">Date *</label>
+                                <input type="date" id="flowDate" required>
+                                <span class="form-help">Counted from the start of this day.</span>
+                            </div>
+                            <div class="form-group">
+                                <label for="flowType">Type *</label>
+                                <select id="flowType" required>
+                                    <option value="deposit">Deposit (+)</option>
+                                    <option value="withdrawal">Withdrawal (−)</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="flowAmount">Amount (<span class="currencyLabel">USD</span>) *</label>
+                                <input type="number" step="0.01" min="0.01" id="flowAmount" placeholder="e.g. 5000" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="flowNote">Note (Optional)</label>
+                                <input type="text" id="flowNote" maxlength="120" placeholder="e.g. Monthly top-up">
+                            </div>
+                        </div>
+                        <div style="margin-top: 14px; display: flex; justify-content: flex-end;">
+                            <button type="submit" class="btn btn-sm" id="saveFlowBtn">➕ Add Entry</button>
+                        </div>
+                    </form>
+                    <div class="table-responsive" style="margin-top: 16px;">
+                        <table>
+                            <thead>
+                                <tr><th>Date</th><th>Type</th><th>Amount</th><th>Note</th><th style="text-align: right;">Actions</th></tr>
+                            </thead>
+                            <tbody id="flowsTableBody">
+                                <tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 18px;">No deposits or withdrawals yet.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
 
                 <!-- Quick Daily Entry Card -->
@@ -646,6 +729,8 @@
                                 <tr>
                                     <th>Date</th>
                                     <th>Net Realized P&L</th>
+                                    <th>Start Balance</th>
+                                    <th>Daily %</th>
                                     <th>Status</th>
                                     <th>Trades (W / L / BE)</th>
                                     <th>Win Rate %</th>
@@ -657,7 +742,7 @@
                             </thead>
                             <tbody id="performanceTableBody">
                                 <tr>
-                                    <td colspan="9" style="text-align: center; color: var(--text-muted); padding: 30px;">
+                                    <td colspan="11" style="text-align: center; color: var(--text-muted); padding: 30px;">
                                         Loading records...
                                     </td>
                                 </tr>
@@ -1019,72 +1104,190 @@
             authView.style.display = "none";
             dashboardView.style.display = "block";
             logoutBtn.style.display = "inline-flex";
-            loadPerformanceRecords();
+            document.getElementById("flowDate").value = todayStr;
+            refreshAccountAndRecords();
             loadReviews();
             loadInquiries();
             updateCurrencyLabels();
-            loadPublicUsdSetting();
         }
 
         // ==========================================
-        // PUBLIC USD P&L VISIBILITY (site_settings, admin-only via RLS)
+        // ACCOUNT CAPITAL, DEPOSITS / WITHDRAWALS & PERCENTAGES (admin-only)
+        // The daily % is calculated by the database (get_published_performance),
+        // the same numbers visitors see. Here the admin also sees the USD behind them.
         // ==========================================
-        let publicUsdOn = false;
+        const esc = (s) => String(s == null ? "" : s)
+            .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+        const money = (v, sign) => window.SPACFX.formatCurrency(Number(v) || 0, !!sign);
+        const fmtPctA = (v) => {
+            if (v === null || v === undefined || !Number.isFinite(v)) return "—";
+            const r = Math.abs(v) < 0.005 ? 0 : v;
+            return (r > 0 ? "+" : r < 0 ? "−" : "") + Math.abs(r).toFixed(2) + "%";
+        };
+        const pctClass = (v) => (v === null || !Number.isFinite(v)) ? "pct-flat" : (v > 0.0049 ? "pct-pos" : (v < -0.0049 ? "pct-neg" : "pct-flat"));
+        const compound = (list) => { let g = 1; list.forEach((p) => { if (Number.isFinite(p)) g *= 1 + p / 100; }); return (g - 1) * 100; };
+        const drawdown = (list) => {
+            let g = 1, peak = 1, worst = 0;
+            list.forEach((p) => { if (!Number.isFinite(p)) return; g *= 1 + p / 100; if (g > peak) peak = g; worst = Math.max(worst, (peak - g) / peak); });
+            return worst * 100;
+        };
 
-        function renderPublicUsdSetting(on, canEdit, hint) {
-            const status = document.getElementById("publicUsdStatus");
-            const btn = document.getElementById("publicUsdToggleBtn");
-            publicUsdOn = on;
-            status.textContent = on ? "Visible to public" : "Hidden from public (•••)";
-            status.style.color = on ? "var(--profit-green, #10b981)" : "var(--gold-light)";
-            btn.textContent = on ? "Hide USD amounts from public" : "Show USD amounts to public";
-            btn.disabled = !canEdit;
-            document.getElementById("publicUsdHint").textContent = hint || "";
-        }
+        let startingCapital = null;
+        let currentFlows = [];
+        let pctById = new Map();   // record id -> { pct, sb } from the database
 
-        async function loadPublicUsdSetting() {
+        async function loadAccount() {
             const supabase = window.SPACFX.getClient();
             if (!supabase) return;
             try {
-                const [{ data: setting, error }, { data: admin }] = await Promise.all([
-                    supabase.from("site_settings").select("show_public_usd").eq("id", 1).maybeSingle(),
-                    supabase.rpc("is_admin"),
+                const [acct, flows] = await Promise.all([
+                    supabase.from("trading_account").select("starting_capital").eq("id", 1).maybeSingle(),
+                    supabase.from("capital_flows").select("*").order("flow_date", { ascending: false }),
                 ]);
-                if (error || !setting) {
-                    document.getElementById("publicUsdStatus").textContent = "Not set up";
-                    document.getElementById("publicUsdToggleBtn").disabled = true;
-                    document.getElementById("publicUsdHint").textContent = "Run sections 9 and 10 of supabase_schema.sql in the Supabase SQL Editor to enable this control.";
-                    return;
-                }
-                renderPublicUsdSetting(!!setting.show_public_usd, admin === true,
-                    admin === true ? "" : "Your account is not on the admin allowlist (admin_users), so this setting is read-only.");
+                if (acct.error) throw acct.error;
+                if (flows.error) throw flows.error;
+                startingCapital = acct.data && acct.data.starting_capital !== null ? Number(acct.data.starting_capital) : null;
+                currentFlows = flows.data || [];
+                if (startingCapital !== null) document.getElementById("startingCapital").value = startingCapital;
+                renderFlows();
             } catch (err) {
-                console.warn("Could not load public USD setting:", err);
+                const missing = /trading_account|capital_flows|does not exist|schema cache/i.test(err.message || "");
+                document.getElementById("capitalHint").innerHTML = missing
+                    ? "⚠️ Percentage tracking is not set up in the database yet. Run <strong>supabase_percent_upgrade.sql</strong> in the Supabase SQL Editor once, then refresh this page."
+                    : "Could not load account: " + esc(err.message);
             }
         }
 
-        document.getElementById("publicUsdToggleBtn").addEventListener("click", async () => {
+        async function loadPercentages() {
+            const supabase = window.SPACFX.getClient();
+            pctById = new Map();
+            if (!supabase) return [];
+            try {
+                const { data, error } = await supabase.rpc("get_published_performance");
+                if (error) throw error;
+                (data || []).forEach((r) => pctById.set(r.id, {
+                    pct: r.daily_pct === null || r.daily_pct === undefined ? null : Number(r.daily_pct),
+                    sb: r.start_balance === null || r.start_balance === undefined ? null : Number(r.start_balance),
+                    date: String(r.trading_date).slice(0, 10),
+                    pnl: Number(r.daily_net_pnl) || 0,
+                }));
+                return data || [];
+            } catch (err) {
+                console.warn("Percentages unavailable:", err.message);
+                return [];
+            }
+        }
+
+        function renderAccountSummary() {
+            const pub = Array.from(pctById.values()).sort((a, b) => (a.date < b.date ? -1 : 1));
+            const netPnl = pub.reduce((s, r) => s + r.pnl, 0);
+            const flowsNet = currentFlows.reduce((s, f) => s + (Number(f.amount) || 0), 0);
+            const set = (id, html, cls) => { const el = document.getElementById(id); el.innerHTML = html; el.className = cls || ""; };
+            set("acctCapital", startingCapital === null ? "Not set" : money(startingCapital));
+            set("acctPnl", money(netPnl, true), netPnl > 0 ? "pct-pos" : netPnl < 0 ? "pct-neg" : "");
+            set("acctFlows", money(flowsNet, true));
+            set("acctBalance", startingCapital === null ? "—" : money(startingCapital + netPnl + flowsNet));
+            const pcts = pub.map((r) => r.pct).filter((p) => p !== null);
+            if (!pcts.length) {
+                ["acctReturn", "acctMonth", "acctDrawdown"].forEach((id) => set(id, "—", "pct-flat"));
+                return;
+            }
+            const total = compound(pcts);
+            const monthKey = todayStr.slice(0, 7);
+            const month = compound(pub.filter((r) => r.date.startsWith(monthKey) && r.pct !== null).map((r) => r.pct));
+            const dd = drawdown(pcts);
+            set("acctReturn", fmtPctA(total), pctClass(total));
+            set("acctMonth", fmtPctA(month), pctClass(month));
+            set("acctDrawdown", dd > 0.0049 ? fmtPctA(-dd) : "0.00%", dd > 0.0049 ? "pct-neg" : "pct-flat");
+        }
+
+        function renderFlows() {
+            const tbody = document.getElementById("flowsTableBody");
+            if (!currentFlows.length) {
+                tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 18px;">No deposits or withdrawals yet.</td></tr>`;
+                return;
+            }
+            tbody.innerHTML = currentFlows.map((f) => {
+                const amt = Number(f.amount) || 0;
+                return `<tr>
+                    <td><strong>${esc(f.flow_date)}</strong></td>
+                    <td>${amt >= 0 ? "Deposit" : "Withdrawal"}</td>
+                    <td class="${amt >= 0 ? "pct-pos" : "pct-neg"}">${money(amt, true)}</td>
+                    <td>${f.note ? esc(f.note) : '<span style="color: var(--text-muted);">—</span>'}</td>
+                    <td style="text-align: right;"><button class="btn btn-danger btn-sm" onclick="deleteFlow('${esc(f.id)}')">Delete</button></td>
+                </tr>`;
+            }).join("");
+        }
+
+        // Reload everything that depends on capital, flows or records
+        async function refreshAccountAndRecords() {
+            await loadAccount();
+            await loadPerformanceRecords();
+        }
+
+        document.getElementById("capitalForm").addEventListener("submit", async (e) => {
+            e.preventDefault();
             const supabase = window.SPACFX.getClient();
             if (!supabase) return;
-            const btn = document.getElementById("publicUsdToggleBtn");
+            const val = parseFloat(document.getElementById("startingCapital").value);
+            if (!(val > 0)) { showNotice("Enter a starting capital above 0.", "error"); return; }
+            const btn = document.getElementById("saveCapitalBtn");
             btn.disabled = true;
-            const next = !publicUsdOn;
             try {
-                // RLS only lets allowlisted admins update this row; anyone else updates 0 rows.
-                const { data, error } = await supabase
-                    .from("site_settings")
-                    .update({ show_public_usd: next })
-                    .eq("id", 1)
-                    .select("show_public_usd");
+                const { data, error } = await supabase.from("trading_account")
+                    .upsert({ id: 1, starting_capital: val }).select("starting_capital");
                 if (error) throw error;
-                if (!data || data.length === 0) throw new Error("Not permitted. Only allowlisted admins can change this setting.");
-                renderPublicUsdSetting(!!data[0].show_public_usd, true);
-                showNotice(next ? "USD amounts are now visible to the public." : "USD amounts are now hidden from the public.", "success");
+                if (!data || !data.length) throw new Error("Not permitted. Only allowlisted admins can change the capital.");
+                showNotice("Starting capital saved. All percentages were recalculated.", "success");
+                await refreshAccountAndRecords();
             } catch (err) {
-                showNotice("Could not update visibility: " + err.message, "error");
+                showNotice("Could not save capital: " + err.message, "error");
+            } finally {
                 btn.disabled = false;
             }
         });
+
+        document.getElementById("flowForm").addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const supabase = window.SPACFX.getClient();
+            if (!supabase) return;
+            const date = document.getElementById("flowDate").value;
+            const amt = parseFloat(document.getElementById("flowAmount").value);
+            const type = document.getElementById("flowType").value;
+            const note = document.getElementById("flowNote").value.trim() || null;
+            if (!date || !(amt > 0)) { showNotice("Enter a date and an amount above 0.", "error"); return; }
+            const btn = document.getElementById("saveFlowBtn");
+            btn.disabled = true;
+            try {
+                const { error } = await supabase.from("capital_flows")
+                    .insert([{ flow_date: date, amount: type === "withdrawal" ? -amt : amt, note }]);
+                if (error) throw error;
+                showNotice(`${type === "withdrawal" ? "Withdrawal" : "Deposit"} added. Balance and percentages were recalculated.`, "success");
+                document.getElementById("flowForm").reset();
+                document.getElementById("flowDate").value = todayStr;
+                await refreshAccountAndRecords();
+            } catch (err) {
+                showNotice("Could not add entry: " + err.message, "error");
+            } finally {
+                btn.disabled = false;
+            }
+        });
+
+        window.deleteFlow = async (id) => {
+            const f = currentFlows.find((x) => x.id === id);
+            if (!confirm(`Delete this ${f && Number(f.amount) < 0 ? "withdrawal" : "deposit"}${f ? " on " + f.flow_date : ""}?`)) return;
+            const supabase = window.SPACFX.getClient();
+            if (!supabase) return;
+            try {
+                const { error } = await supabase.from("capital_flows").delete().eq("id", id);
+                if (error) throw error;
+                showNotice("Entry deleted. Balance and percentages were recalculated.", "info");
+                await refreshAccountAndRecords();
+            } catch (err) {
+                showNotice("Could not delete entry: " + err.message, "error");
+            }
+        };
 
         // Update Currency Labels
         function updateCurrencyLabels() {
@@ -1154,39 +1357,54 @@
 
             if (!supabase) return;
 
-            tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 20px;">Fetching records...</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="11" style="text-align: center; color: var(--text-muted); padding: 20px;">Fetching records...</td></tr>`;
 
             try {
-                const { data, error } = await supabase
-                    .from("daily_performance")
-                    .select("*")
-                    .order("trading_date", { ascending: false });
+                const [{ data, error }] = await Promise.all([
+                    supabase.from("daily_performance").select("*").order("trading_date", { ascending: false }),
+                    loadPercentages(),
+                ]);
 
                 if (error) throw error;
 
                 currentRecords = data || [];
                 recordCount.textContent = `${currentRecords.length} record${currentRecords.length === 1 ? '' : 's'}`;
+                renderAccountSummary();
 
                 if (currentRecords.length === 0) {
-                    tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 30px;">No trading records saved yet. Use the form above to add your first day!</td></tr>`;
+                    tbody.innerHTML = `<tr><td colspan="11" style="text-align: center; color: var(--text-muted); padding: 30px;">No trading records saved yet. Use the form above to add your first day!</td></tr>`;
                     return;
                 }
 
+                const dash = '<span style="color: var(--text-muted);">—</span>';
                 tbody.innerHTML = currentRecords.map(rec => {
                     const pnlClass = rec.daily_net_pnl > 0 ? "status-profit" : (rec.daily_net_pnl < 0 ? "status-loss" : "status-neutral");
                     const statusClass = rec.trading_status === "Profit" ? "status-profit" : (rec.trading_status === "Loss" ? "status-loss" : "status-neutral");
                     const pubClass = rec.publication_status === "Published" ? "pub-published" : "pub-draft";
+                    const calc = pctById.get(rec.id);
+                    const isDraft = rec.publication_status !== "Published";
+                    const sbCell = isDraft ? '<span style="color: var(--text-muted); font-size: 0.78rem;">Draft — not counted</span>'
+                        : (calc && calc.sb !== null ? money(calc.sb) : dash);
+                    const pctCell = isDraft || !calc || calc.pct === null ? dash
+                        : `<span class="${pctClass(calc.pct)}">${fmtPctA(calc.pct)}</span>`;
+                    const has = (v) => v !== null && v !== undefined && v !== "";
+                    const wlb = [rec.winning_trades, rec.losing_trades, rec.be_trades].some(has)
+                        ? ` <span style="color: var(--text-muted);">(${has(rec.winning_trades) ? rec.winning_trades : 0} / ${has(rec.losing_trades) ? rec.losing_trades : 0} / ${has(rec.be_trades) ? rec.be_trades : 0})</span>` : "";
 
                     return `
                         <tr>
-                            <td><strong>${rec.trading_date}</strong></td>
+                            <td><strong>${esc(rec.trading_date)}</strong></td>
                             <td class="${pnlClass}" style="font-weight: 700;">
                                 ${window.SPACFX.formatCurrency(rec.daily_net_pnl, true)}
                             </td>
-                            <td><span class="status-badge ${statusClass}">${rec.trading_status}</span></td>
-                            <td>${rec.num_trades !== null ? rec.num_trades : '—'}</td>
-                            <td style="max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${rec.market_notes || ''}">
-                                ${rec.market_notes || '<span style="color: var(--text-muted);">—</span>'}
+                            <td style="white-space: nowrap;">${sbCell}</td>
+                            <td style="white-space: nowrap;">${pctCell}</td>
+                            <td><span class="status-badge ${statusClass}">${esc(rec.trading_status)}</span></td>
+                            <td style="white-space: nowrap;">${has(rec.num_trades) ? rec.num_trades : '—'}${wlb}</td>
+                            <td>${has(rec.win_rate) ? esc(rec.win_rate) + '%' : dash}</td>
+                            <td>${has(rec.risk_reward) ? esc(rec.risk_reward) : dash}</td>
+                            <td style="max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${esc(rec.market_notes || '')}">
+                                ${rec.market_notes ? esc(rec.market_notes) : dash}
                             </td>
                             <td><span class="pub-badge ${pubClass}">${rec.publication_status}</span></td>
                             <td style="text-align: right; white-space: nowrap;">
@@ -1202,7 +1420,7 @@
 
             } catch (err) {
                 console.error("Error loading performance:", err);
-                tbody.innerHTML = `<tr><td colspan="7" style="color: var(--danger); text-align: center;">Error loading records: ${err.message}</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="11" style="color: var(--danger); text-align: center;">Error loading records: ${err.message}</td></tr>`;
             }
         }
 
@@ -1381,16 +1599,24 @@
                     return;
                 }
 
+                const pending = currentReviews.filter(r => r.submitted_by_visitor && r.publication_status !== "Published").length;
+                const badge = document.getElementById("pendingReviewBadge");
+                if (badge) { badge.textContent = pending ? ` (${pending} to approve)` : ""; }
+
                 tbody.innerHTML = currentReviews.map(rev => {
-                    const stars = "★".repeat(rev.rating) + "☆".repeat(5 - rev.rating);
+                    const rr = Math.max(1, Math.min(5, parseInt(rev.rating, 10) || 5));
+                    const stars = "★".repeat(rr) + "☆".repeat(5 - rr);
                     const pubClass = rev.publication_status === "Published" ? "pub-published" : "pub-draft";
                     const isIdentified = rev.allow_name !== false;
                     const isVerified = rev.is_verified !== false;
                     const displayDate = rev.review_date || (rev.created_at ? rev.created_at.split('T')[0] : '—');
+                    const fromVisitor = rev.submitted_by_visitor === true;
+                    const statusLabel = rev.publication_status === "Published" ? "Published"
+                        : (fromVisitor ? "Awaiting approval" : "Draft");
 
                     return `
                         <tr>
-                            <td><strong>${rev.student_name}</strong></td>
+                            <td><strong>${esc(rev.student_name)}</strong>${fromVisitor ? '<br><span class="pub-badge" style="background: rgba(96,165,250,0.15); color: #93c5fd; margin-top: 4px; display: inline-block;">Visitor submission</span>' : ''}</td>
                             <td style="white-space: nowrap;">
                                 <span class="pub-badge" style="background: ${isIdentified ? 'rgba(16,185,129,0.15)' : 'rgba(148,163,184,0.15)'}; color: ${isIdentified ? '#86efac' : '#cbd5e1'};">
                                     ${isIdentified ? 'Name Public' : 'Anonymous'}
@@ -1399,15 +1625,15 @@
                             </td>
                             <td style="color: var(--gold-primary); font-size: 1.05rem;">${stars}</td>
                             <td style="font-size: 0.8rem; color: var(--text-muted); white-space: nowrap;">${displayDate}</td>
-                            <td>${rev.location_or_batch || '—'}</td>
-                            <td style="max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${rev.review_text}">
-                                "${rev.review_text}"
+                            <td>${esc(rev.location_or_batch || '—')}</td>
+                            <td style="max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${esc(rev.review_text)}">
+                                "${esc(rev.review_text)}"
                             </td>
-                            <td><span class="pub-badge ${pubClass}">${rev.publication_status}</span></td>
+                            <td><span class="pub-badge ${pubClass}">${statusLabel}</span></td>
                             <td style="text-align: right; white-space: nowrap;">
                                 <button class="btn btn-outline btn-sm" onclick="editReview('${rev.id}')">Edit</button>
-                                <button class="btn btn-outline btn-sm" onclick="togglePublishReview('${rev.id}', '${rev.publication_status}')">
-                                    ${rev.publication_status === 'Published' ? 'Unpublish' : 'Publish'}
+                                <button class="btn ${rev.publication_status === 'Published' ? 'btn-outline' : ''} btn-sm" onclick="togglePublishReview('${rev.id}', '${rev.publication_status}')">
+                                    ${rev.publication_status === 'Published' ? 'Unpublish' : (fromVisitor ? '✓ Approve & Publish' : 'Publish')}
                                 </button>
                                 <button class="btn btn-danger btn-sm" onclick="deleteReview('${rev.id}')">Delete</button>
                             </td>
