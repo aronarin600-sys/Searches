@@ -216,6 +216,10 @@
                             </div>
                             <div class="tpd-admin-tools" id="tpdAdminTools" hidden>
                                 <span class="tpd-admin-pill" title="USD is visible only to signed-in admins">Admin view</span>
+                                <button class="tpd-btn" id="tpdJournalBtn" type="button" title="Save a picture of this dashboard with the SPACFX name and date (press Hide USD first for a picture without dollar amounts)">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+                                    <span>Download Image</span>
+                                </button>
                                 <button class="tpd-btn" id="tpdUsdToggle" type="button" aria-pressed="false" hidden>
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
                                     <span id="tpdUsdToggleText">Hide USD</span>
@@ -224,12 +228,16 @@
                         </div>
     
                         <div class="tpd-stack">
-                            <!-- 2. Performance summary -->
-                            <div class="tpd-stats tpd-returns" id="tpdReturns" aria-label="Account returns"></div>
-                            <div class="tpd-stats" id="tpdStats"></div>
-    
-                            <!-- 3. Charts -->
-                            <div class="tpd-charts">
+                            <!-- 2. Top row: SPACFX score + charts -->
+                            <div class="tpd-top">
+                                <div class="tpd-panel tpd-score">
+                                    <div class="tpd-panel-head">
+                                        <div class="tpd-panel-title">SPACFX score</div>
+                                        <div class="tpd-score-num" id="tpdScoreNum">—</div>
+                                    </div>
+                                    <div class="tpd-radar" id="tpdRadar" role="img" aria-label="SPACFX score breakdown"></div>
+                                    <div class="tpd-score-bar" aria-hidden="true"><span id="tpdScoreBar"></span></div>
+                                </div>
                                 <div class="tpd-panel">
                                     <div class="tpd-panel-head">
                                         <div class="tpd-panel-title">Cumulative pips</div>
@@ -251,6 +259,10 @@
                                     </div>
                                 </div>
                             </div>
+
+                            <!-- 3. Performance summary (3 columns) -->
+                            <div class="tpd-stats" id="tpdStats"></div>
+                            <div class="tpd-stats tpd-returns" id="tpdReturns" aria-label="Account returns"></div>
     
                             <!-- 4. Monthly calendar (main journal view) -->
                             <div class="tpd-panel">

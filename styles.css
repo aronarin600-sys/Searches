@@ -2136,3 +2136,107 @@ footer {
 @media (max-width: 560px) {
     .review-form-card .rf-row { grid-template-columns: 1fr; gap: 0; }
 }
+
+/* ======================================================== */
+/* TRADING PERFORMANCE LAYOUT: score + charts, 3-col cards  */
+/* ======================================================== */
+.tpd-top {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+}
+.tpd-top .tpd-panel { padding: 16px 18px; display: flex; flex-direction: column; }
+.tpd-top .tpd-panel-head { margin-bottom: 8px; }
+.tpd-top .tpd-chart { height: clamp(150px, 14vw, 180px); }
+
+/* SPACFX score card */
+.tpd-score-num {
+    font-size: 1.15rem;
+    font-weight: 800;
+    color: var(--gold-primary);
+    font-variant-numeric: tabular-nums;
+}
+.tpd-radar { flex: 1; display: flex; align-items: center; justify-content: center; min-height: 140px; }
+.tpd-radar svg { width: 100%; max-width: 300px; height: auto; display: block; overflow: visible; }
+.tpd-radar .rd-grid { fill: none; stroke: var(--chart-grid); stroke-width: 1; }
+.tpd-radar .rd-shape { fill: var(--gold-soft); stroke: var(--gold-primary); stroke-width: 1.5; stroke-linejoin: round; }
+.tpd-radar .rd-dot { stroke: var(--bg-card); stroke-width: 1.2; }
+.tpd-radar .rd-good { fill: var(--profit-green); }
+.tpd-radar .rd-mid { fill: var(--gold-primary); }
+.tpd-radar .rd-low { fill: var(--loss-red); }
+.tpd-radar .rd-label { fill: var(--text-muted); font-size: 9.5px; font-weight: 500; }
+.tpd-radar .rd-val { fill: var(--gold-light); font-weight: 800; }
+.tpd-score-bar {
+    height: 6px;
+    border-radius: 999px;
+    background: var(--chart-grid);
+    overflow: hidden;
+    margin-top: 8px;
+}
+.tpd-score-bar span {
+    display: block;
+    height: 100%;
+    width: 0;
+    border-radius: inherit;
+    background: var(--gold-gradient);
+    transition: width 1s var(--ease-out);
+}
+
+/* Summary cards: always 3 columns (like Net pips / Net R / Net USD) */
+.tpd-stats,
+.tpd-stats.has-usd { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.tpd-stat-label::before { background: var(--gold-primary); opacity: 1; }
+
+@media (max-width: 1000px) {
+    .tpd-top { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .tpd-top .tpd-score { grid-column: 1 / -1; }
+    .tpd-top .tpd-score .tpd-radar svg { max-width: 340px; }
+}
+@media (max-width: 760px) {
+    .tpd-stats,
+    .tpd-stats.has-usd,
+    .tpd-stats.tpd-returns { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+    .tpd-stats .tpd-stat:last-child:nth-child(odd) { grid-column: auto; }
+}
+@media (max-width: 640px) {
+    .tpd-top { grid-template-columns: 1fr; }
+    .tpd-stats,
+    .tpd-stats.has-usd,
+    .tpd-stats.tpd-returns { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .tpd-stats .tpd-stat:last-child:nth-child(odd) { grid-column: 1 / -1; }
+}
+
+/* Tracker calendar: equal-width day columns even when a day shows a % value */
+.calendar-grid { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.calendar-grid .cal-day { min-width: 0; }
+@media (max-width: 480px) {
+    .cal-day-pct { font-size: 0.6rem; letter-spacing: -0.02em; }
+}
+
+/* Six summary cards: 3 per row on computers, 2 per row on phones */
+.tpd-stats.tpd-returns:empty { display: none; }
+
+/* Picture download: brand header added only while the picture is taken */
+.tpd-snap-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 4px 2px 18px;
+    margin-bottom: 18px;
+    border-bottom: 1px solid var(--border-gold);
+}
+.tpd-snap-brand { display: flex; flex-direction: column; line-height: 1.1; }
+.tpd-snap-logo { font-size: 1.7rem; font-weight: 800; letter-spacing: 3px; color: var(--gold-primary); }
+.tpd-snap-tag { font-size: 0.68rem; letter-spacing: 2.5px; text-transform: uppercase; color: var(--text-muted); margin-top: 4px; }
+.tpd-snap-meta { display: flex; flex-direction: column; align-items: flex-end; text-align: right; gap: 3px; }
+.tpd-snap-meta strong { font-size: 1rem; color: var(--text-main); }
+.tpd-snap-meta span { font-size: 0.78rem; color: var(--text-muted); }
+.tpd.is-capturing .tpd-admin-tools { display: none !important; }
+.tpd.is-capturing .tpd-stat:hover { transform: none; }
+/* While the picture is taken, show everything in its final state (no fade-ins) */
+.tpd.is-capturing *,
+.tpd.is-capturing *::before,
+.tpd.is-capturing *::after { animation: none !important; transition: none !important; }
+/* The picture tool draws inset shadows too thick; use a plain border for "today" in pictures */
+.tpd.is-capturing .tpd-day.today { box-shadow: none !important; border: 2px solid var(--accent) !important; }

@@ -43,30 +43,10 @@
     const anyPct = () => Array.from(pctByDate.values()).some((v) => v !== null);
     const pctTone = (v) => (v > 0.0049 ? "pos" : v < -0.0049 ? "neg" : "flat");
 
-    // Return cards: Total return %, This month %, Max drawdown % (from daily % only)
-    function renderReturns(t) {
+    // Return figures now live inside the six summary cards; this row stays empty.
+    function renderReturns() {
         const el = $("tpdReturns");
-        if (!el) return;
-        if (!loaded) { el.innerHTML = ""; return; }
-        const allDates = Array.from(pctByDate.keys()).sort();
-        const has = anyPct();
-        const k = Math.min(t, 1);
-        const card = (label, valueHtml, sub) =>
-            `<div class="tpd-stat tpd-ret"><div class="tpd-stat-label">${label}</div><div class="tpd-stat-value">${valueHtml}</div><div class="tpd-stat-sub">${sub}</div></div>`;
-        if (!has) {
-            el.innerHTML = card("Total return", "—", allDates.length ? "Shown once the account capital is set" : "No published days yet");
-            return;
-        }
-        const total = compoundPct(pctList(allDates));
-        const monthPrefix = todayStr.slice(0, 7);
-        const monthDates = allDates.filter((ds) => ds.startsWith(monthPrefix));
-        const month = monthDates.length ? compoundPct(pctList(monthDates)) : 0;
-        const dd = maxDrawdownPct(pctList(allDates));
-        el.innerHTML = [
-            card("Total return", `<span class="${pctTone(total)}">${fmtPct(total * k)}</span>`, `Compounded · ${plural(allDates.length, "day")}`),
-            card("This month", `<span class="${pctTone(month)}">${fmtPct(month * k)}</span>`, `${MONTHS[+monthPrefix.slice(5, 7) - 1]} ${monthPrefix.slice(0, 4)} · ${plural(monthDates.length, "day")}`),
-            card("Max drawdown", `<span class="${dd > 0.0049 ? "neg" : "flat"}">${dd > 0.0049 ? fmtPct(-dd * k) : "0.00%"}</span>`, "Largest fall from a peak"),
-        ].join("");
+        if (el) el.innerHTML = "";
     }
 
     function setRecords(rows) {
@@ -97,6 +77,7 @@
     // ------------------------------------------------------------------
     let loaded = false;   // true once the database answered
     let isAdmin = false;
+    let showUsd = false;   // USD shown: admins always; visitors only when the admin allows it
     let usdByDate = new Map();
     let hideUsd = typeof HIDE_USD !== "undefined" ? !!HIDE_USD : false;
     const allowToggle = typeof ALLOW_TOGGLE !== "undefined" ? !!ALLOW_TOGGLE : true;
@@ -172,7 +153,7 @@
         statsT = t;
         renderReturns(t);
         const el = $("tpdStats");
-        el.classList.toggle("has-usd", isAdmin);
+        el.classList.toggle("has-usd", showUsd);
         if (!S.n) {
             el.innerHTML = `<div class="tpd-stat" style="grid-column: 1 / -1;"><div class="tpd-stat-label">${loaded ? "No published days yet" : "Loading…"}</div><div class="tpd-stat-sub">${loaded ? "Results appear here once trading days are published." : "&nbsp;"}</div></div>`;
             return;
@@ -184,24 +165,133 @@
         const rrText = S.rr === null ? "—" : `1:${(S.rr * Math.min(t, 1)).toFixed(2)}`;
         const pfText = S.pf === null ? "—" : (S.pf === Infinity ? "∞" : (S.pf * t).toFixed(2));
 
-        const cards = [
-            card("Net pips", `<span class="${tone(S.pips)}">${fPips(tween(S.pips, t))}</span>`, plural(S.n, "trading day")),
-            card("Net R", `<span class="${tone(S.r)}">${fR(tween(S.r, t))}</span>`, `avg ${fR(round2(S.r / S.n))} / day`),
-            card("Day win %", `${(S.winPct * t).toFixed(1)}%`, dayBreak),
-            card("Avg R:R", rrText, `win ${num(S.avgWin, 2)}R / loss ${num(S.avgLoss, 2)}R`),
-            card("Profit factor", pfText, "gross R won ÷ R lost"),
-            card("Best day", `<span class="${tone(S.best.pips)}">${fPips(tween(S.best.pips, t))}</span>`, `${fDateShort(S.best.date)} · ${fR(S.best.r)}`),
-            card("Worst day", `<span class="${tone(S.worst.pips)}">${fPips(tween(S.worst.pips, t))}</span>`, `${fDateShort(S.worst.date)} · ${fR(S.worst.r)}`),
-            card("Total trades", String(Math.round(S.trades * t)), `${(S.trades / S.n).toFixed(1)} per day`),
-        ];
+        // Six cards only (3 × 2 on computers, 2 × 3 on phones).
+        // Details of the removed cards live in the small grey lines underneath.
+        const k = Math.min(t, 1);
+        const has = anyPct();
+        const allDates = Array.from(pctByDate.keys()).sort();
+        const total = has ? compoundPct(pctList(allDates)) : null;
+        const dd = has ? maxDrawdownPct(pctList(allDates)) : null;
+        const monthPrefix = todayStr.slice(0, 7);
+        const monthDates = allDates.filter((ds) => ds.startsWith(monthPrefix));
+        const month = has ? (monthDates.length ? compoundPct(pctList(monthDates)) : 0) : null;
+        const pctCard = (label, v, sub, neg) => card(label,
+            v === null ? "—" : `<span class="${neg ? (v > 0.0049 ? "neg" : "flat") : pctTone(v)}">${neg ? (v > 0.0049 ? fmtPct(-v * k) : "0.00%") : fmtPct(v * k)}</span>`,
+            v === null ? "Shown once capital is set" : sub);
 
-        if (isAdmin) {
+        const cards = [
+            card("Net pips", `<span class="${tone(S.pips)}">${fPips(tween(S.pips, t))}</span>`,
+                `${fR(S.r)} · best ${fPips(S.best.pips)} · worst ${fPips(S.worst.pips)}`),
+            pctCard("Total return", total, `Compounded · ${plural(S.n, "trading day")}`),
+            card("Day win %", `${(S.winPct * t).toFixed(1)}%`, `${dayBreak} · ${plural(Math.round(S.trades), "trade")}`),
+            card("Profit factor", pfText, `Avg R:R ${rrText}`),
+            pctCard("Max drawdown", dd, "Largest fall from a peak", true),
+        ];
+        // 6th card: Net USD when USD may be shown (admin, or public switch on); otherwise This month %
+        if (showUsd) {
             const totalUsd = round2(days.reduce((s, d) => s + usdOf(d.date), 0));
             cards.splice(2, 0, card("Net USD",
                 `<span class="${hideUsd ? "masked" : tone(totalUsd)}">${fUsd(tween(totalUsd, t))}</span>`,
-                hideUsd ? "Hidden" : `avg ${fUsd(round2(totalUsd / S.n))} / day`));
+                hideUsd ? "Hidden" : (month === null ? `avg ${fUsd(round2(totalUsd / S.n))} / day` : `This month ${fmtPct(month)}`)));
+        } else {
+            cards.splice(2, 0, pctCard("This month", month,
+                `${MONTHS[+monthPrefix.slice(5, 7) - 1]} ${monthPrefix.slice(0, 4)} · ${plural(monthDates.length, "day")}`));
         }
         el.innerHTML = cards.join("");
+        renderScore();
+    }
+
+    // ------------------------------------------------------------------
+    // SPACFX SCORE — six 0-100 ratings from public data only (pips, R, %)
+    // ------------------------------------------------------------------
+    const clamp100 = (v) => Math.max(0, Math.min(100, v));
+    function computeScore() {
+        if (!days.length) return null;
+        // Profit factor & average win/loss: from R, or from pips when R was not entered
+        const useR = days.some((d) => d.r !== 0);
+        const val = (d) => (useR ? d.r : d.pips);
+        const wins = days.filter((d) => val(d) > 0), losses = days.filter((d) => val(d) < 0);
+        const won = wins.reduce((s, d) => s + val(d), 0), lost = -losses.reduce((s, d) => s + val(d), 0);
+        const pf = lost > 0 ? won / lost : (won > 0 ? Infinity : 0);
+        const avgW = wins.length ? won / wins.length : 0, avgL = losses.length ? lost / losses.length : 0;
+        const ratio = avgL > 0 ? avgW / avgL : (avgW > 0 ? Infinity : 0);
+
+        // Growth path: % when the account capital is set, otherwise pips
+        const usePct = anyPct();
+        const allDates = Array.from(pctByDate.keys()).sort();
+        let total, maxDd;
+        if (usePct) {
+            const list = pctList(allDates);
+            total = compoundPct(list);
+            maxDd = maxDrawdownPct(list);
+        } else {
+            let cum = 0, peak = 0; maxDd = 0;
+            days.forEach((d) => { cum += d.pips; peak = Math.max(peak, cum); maxDd = Math.max(maxDd, peak - cum); });
+            total = cum;
+        }
+        const recovery = maxDd > 0 ? total / maxDd : (total > 0 ? Infinity : 0);
+
+        // Consistency: share of weeks that ended positive
+        const weeks = new Map();
+        days.forEach((d) => {
+            const dt = parseDate(d.date);
+            dt.setDate(dt.getDate() - dt.getDay());
+            const key = `${dt.getFullYear()}-${dt.getMonth()}-${dt.getDate()}`;
+            const v = usePct ? (d.pct || 0) : d.pips;
+            weeks.set(key, (weeks.get(key) || 0) + v);
+        });
+        const wk = Array.from(weeks.values());
+        const consistency = wk.length ? (wk.filter((v) => v > 0).length / wk.length) * 100 : 0;
+
+        const m = [
+            { key: "Win %", v: clamp100(S.winPct) },
+            { key: "Profit factor", v: pf === Infinity ? 100 : clamp100((pf / 3) * 100) },
+            { key: "Avg win/loss", v: ratio === Infinity ? 100 : clamp100((ratio / 2.5) * 100) },
+            { key: "Recovery", v: recovery === Infinity ? 100 : clamp100((recovery / 3) * 100) },
+            { key: "Drawdown", v: usePct ? clamp100(100 - maxDd * 5) : (maxDd > 0 && total > 0 ? clamp100(100 - (maxDd / (total + maxDd)) * 100) : (total > 0 ? 100 : 0)) },
+            { key: "Consistency", v: clamp100(consistency) },
+        ].map((x) => ({ ...x, v: Math.round(x.v) }));
+        const score = Math.round(m.reduce((s, x) => s + x.v, 0) / m.length);
+        return { score, metrics: m };
+    }
+
+    function renderScore() {
+        const box = $("tpdRadar");
+        if (!box) return;
+        const res = computeScore();
+        $("tpdScoreNum").textContent = res ? String(res.score) : "—";
+        $("tpdScoreBar").style.width = res ? `${res.score}%` : "0%";
+        const W = 300, H = 178, cx = 150, cy = 90, R = 54;
+        const n = 6;
+        const pt = (i, r) => {
+            const a = -Math.PI / 2 + (i * 2 * Math.PI) / n;
+            return [cx + Math.cos(a) * r, cy + Math.sin(a) * r];
+        };
+        const poly = (r) => Array.from({ length: n }, (_, i) => pt(i, r).map((v) => v.toFixed(1)).join(",")).join(" ");
+        let svg = `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true">`;
+        [1, 2 / 3, 1 / 3].forEach((f) => { svg += `<polygon class="rd-grid" points="${poly(R * f)}"/>`; });
+        for (let i = 0; i < n; i++) { const [x, y] = pt(i, R); svg += `<line class="rd-grid" x1="${cx}" y1="${cy}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}"/>`; }
+        const metrics = res ? res.metrics : ["Win %", "Profit factor", "Avg win/loss", "Recovery", "Drawdown", "Consistency"].map((key) => ({ key, v: 0 }));
+        if (res) {
+            const shape = metrics.map((m, i) => pt(i, R * Math.max(0.04, m.v / 100)).map((v) => v.toFixed(1)).join(",")).join(" ");
+            svg += `<polygon class="rd-shape" points="${shape}"/>`;
+            metrics.forEach((m, i) => {
+                const [x, y] = pt(i, R * Math.max(0.04, m.v / 100));
+                const cls = m.v >= 70 ? "rd-good" : m.v >= 50 ? "rd-mid" : "rd-low";
+                svg += `<circle class="rd-dot ${cls}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3.2"/>`;
+            });
+        }
+        metrics.forEach((m, i) => {
+            const [x, y] = pt(i, R + 16);
+            const anchor = Math.abs(x - cx) < 4 ? "middle" : (x > cx ? "start" : "end");
+            const dy = y < cy - 10 ? -2 : (y > cy + 10 ? 9 : 4);
+            svg += `<text class="rd-label" x="${x.toFixed(1)}" y="${(y + dy).toFixed(1)}" text-anchor="${anchor}">${m.key} <tspan class="rd-val">${res ? m.v : "—"}</tspan></text>`;
+        });
+        svg += `</svg>`;
+        box.innerHTML = svg;
+        box.setAttribute("aria-label", res
+            ? `SPACFX score ${res.score} out of 100. ` + metrics.map((m) => `${m.key} ${m.v}`).join(", ")
+            : "SPACFX score not available yet");
     }
 
     // ------------------------------------------------------------------
@@ -298,7 +388,7 @@
         geom.cum = { pad, pw, n, x, y };
         dateLabels(ctx, w, h, pad, x);
 
-        const accent = tok("--accent");
+        const accent = tok("--gold-primary") || tok("--accent");
         const base = y(0); // fill toward the zero line
 
         // Reveal from left to right while animating
@@ -477,7 +567,7 @@
     bindHover($("tpdBarChart"), $("tpdBarTip"), "bar",
         (g, px) => Math.floor((px - g.pad.l) / g.slot),
         (d) => `<strong>${fDateDow(d.date)}</strong><span class="${tone(d.pips)}">${fPips(d.pips)}</span> pips · <span class="${tone(d.r)}">${fR(d.r)}</span><br>${plural(d.trades, "trade")}` +
-            (isAdmin ? ` · ${usdHtml(usdOf(d.date))}` : ""));
+            (showUsd ? ` · ${usdHtml(usdOf(d.date))}` : ""));
 
     // ------------------------------------------------------------------
     // MONTHLY CALENDAR (main journal view)
@@ -503,7 +593,7 @@
             (mPct !== null ? `<span>Return <b class="${pctTone(mPct)}">${fmtPct(mPct)}</b></span>` : "") +
             `<span>Pips <b class="${tone(mp)}">${fPips(mp)}</b></span>` +
             `<span>R <b class="${tone(mr)}">${fR(mr)}</b></span>`;
-        if (isAdmin) {
+        if (showUsd) {
             const mu = round2(inMonth.reduce((s, d) => s + usdOf(d.date), 0));
             sumHtml += `<span>USD <b>${usdHtml(mu)}</b></span>`;
         }
@@ -530,14 +620,14 @@
                     continue;
                 }
                 wk.pips += d.pips; wk.r += d.r; wk.n++;
-                if (isAdmin) wk.usd += usdOf(ds);
+                if (showUsd) wk.usd += usdOf(ds);
                 const cls = d.result;
                 html += `<div class="tpd-day ${cls}${today}" style="--i:${i}" title="${fDateFull(ds)}">` +
                     `<span class="dnum">${dn}</span>` +
                     `<span class="dpips ${tone(d.pips)}">${fPips(d.pips)}<small>pips</small></span>` +
                     (d.pct !== null ? `<span class="dpct ${pctTone(d.pct)}">${fmtPct(d.pct)}</span>` : "") +
                     `<span class="dmeta"><span class="dr">${fR(d.r)}</span><span class="dt">${d.trades}<span class="dt-w"> trade${d.trades === 1 ? "" : "s"}</span><span class="dt-s"> tr</span></span></span>` +
-                    (isAdmin ? `<span class="dusd">${usdHtml(usdOf(ds))}</span>` : "") +
+                    (showUsd ? `<span class="dusd">${usdHtml(usdOf(ds))}</span>` : "") +
                     `</div>`;
             }
             wk.pips = round2(wk.pips); wk.r = round2(wk.r); wk.usd = round2(wk.usd);
@@ -547,7 +637,7 @@
                     ? `<span class="wpips ${tone(wk.pips)}">${fPips(wk.pips)}<small>pips</small></span>` +
                       (wPct !== null ? `<span class="wpct ${pctTone(wPct)}">${fmtPct(wPct)}</span>` : "") +
                       `<span class="wmeta">${fR(wk.r)} · ${plural(wk.n, "day")}</span>` +
-                      (isAdmin ? `<span>${usdHtml(wk.usd)}</span>` : "")
+                      (showUsd ? `<span>${usdHtml(wk.usd)}</span>` : "")
                     : `<span class="wmeta">No trading</span>`) +
                 `</div>`;
         }
@@ -600,17 +690,90 @@
     // ADMIN CHECK — the database decides; the page only asks
     // ------------------------------------------------------------------
     function setPublicMode() {
-        if (!isAdmin && usdByDate.size === 0) return;
+        if (!isAdmin && !showUsd && usdByDate.size === 0) return;
         isAdmin = false;
+        showUsd = false;
         usdByDate = new Map();
         hideUsd = typeof HIDE_USD !== "undefined" ? !!HIDE_USD : false;
         syncAdminTools();
         rerender();
     }
 
+    // ------------------------------------------------------------------
+    // ADMIN: DOWNLOAD A PICTURE (PNG) OF THIS DASHBOARD
+    // Adds the SPACFX name and report date on top, then saves exactly what is on
+    // screen. Tip: press "Hide USD" first to save a picture without dollar amounts.
+    // ------------------------------------------------------------------
+    let lastRows = [];
+    const H2C_URL = "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";
+    function loadHtml2Canvas() {
+        if (window.html2canvas) return Promise.resolve();
+        return new Promise((resolve, reject) => {
+            const s = document.createElement("script");
+            s.src = H2C_URL;
+            s.onload = () => resolve();
+            s.onerror = () => reject(new Error("Could not load the picture tool. Check your internet connection."));
+            document.head.appendChild(s);
+        });
+    }
+
+    async function downloadSnapshot() {
+        if (!isAdmin) return;
+        const btn = $("tpdJournalBtn");
+        const label = btn.querySelector("span");
+        const tpd = $("tpd");
+        label.textContent = "Preparing…";
+        btn.disabled = true;
+        let head = null;
+        try {
+            await loadHtml2Canvas();
+            hideTips();
+            // Final numbers and fully drawn charts, even if the count-up is still running
+            finishNow = true;
+            renderStats(1);
+            chartP = 1;
+            drawCharts();
+            head = document.createElement("div");
+            head.className = "tpd-snap-head";
+            head.innerHTML =
+                `<div class="tpd-snap-brand"><span class="tpd-snap-logo">SPACFX</span><span class="tpd-snap-tag">Market Mastery</span></div>` +
+                `<div class="tpd-snap-meta"><strong>Trading Performance Report</strong><span>Generated ${fDateFull(todayStr)}</span></div>`;
+            tpd.prepend(head);
+            tpd.classList.add("is-capturing");
+            await new Promise((r) => setTimeout(r, 80)); // let the header appear before the picture is taken
+
+            const canvas = await window.html2canvas(tpd, {
+                backgroundColor: tok("--bg-base") || "#07090d",
+                scale: 2,
+                logging: false,
+                useCORS: true,
+            });
+            const blob = await new Promise((r) => canvas.toBlob(r, "image/png"));
+            if (!blob) throw new Error("The picture could not be created.");
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `spacfx-performance-${todayStr}.png`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 4000);
+            label.textContent = "Saved ✓";
+        } catch (err) {
+            console.warn("Picture download failed:", err);
+            label.textContent = "Download failed";
+        } finally {
+            if (head) head.remove();
+            finishNow = false;
+            tpd.classList.remove("is-capturing");
+            btn.disabled = false;
+            setTimeout(() => { label.textContent = "Download Image"; }, 2500);
+        }
+    }
+    if ($("tpdJournalBtn")) $("tpdJournalBtn").addEventListener("click", downloadSnapshot);
+
     // Loads published days (pips, R, trades, status) for everyone. USD is used only
-    // after the database confirms an admin; get_published_performance() withholds
-    // amounts from everyone else.
+    // when the database sends it (admins, or everyone if the admin allows it).
     let checkSeq = 0;
     async function loadData() {
         const seq = ++checkSeq;
@@ -621,6 +784,7 @@
             if (seq !== checkSeq) return;
             if (error) throw error;
             const first = !loaded;
+            lastRows = rows || [];
             setRecords(rows);
             S = computeStats();
             loaded = true;
@@ -633,16 +797,19 @@
                 if (seq !== checkSeq) return;
                 admin = !res.error && res.data === true;
             }
-            if (admin) {
+            // The database sends USD only to admins, or to everyone when the admin
+            // has switched "Public USD Returns" on (amounts_visible = true).
+            const publicUsd = !admin && (rows || []).length > 0 && rows.every((r) => r.amounts_visible === true);
+            if (admin || publicUsd) {
                 usdByDate = new Map((rows || [])
                     .filter((r) => r.daily_net_pnl !== null && r.daily_net_pnl !== undefined)
                     .map((r) => [String(r.trading_date).slice(0, 10), toNum(r.daily_net_pnl)]));
-                isAdmin = true;
             } else {
-                isAdmin = false;
                 usdByDate = new Map();
-                hideUsd = typeof HIDE_USD !== "undefined" ? !!HIDE_USD : false;
             }
+            isAdmin = admin;
+            showUsd = admin || publicUsd;
+            if (!admin) hideUsd = false;
             syncAdminTools();
             rerender();
         } catch (err) {
@@ -656,10 +823,11 @@
     // ------------------------------------------------------------------
     // ENTRANCE ANIMATIONS (count-up stats, chart draw-in)
     // ------------------------------------------------------------------
+    let finishNow = false; // set while a picture is taken: jump every animation to its end
     function animate(duration, step) {
         const t0 = performance.now();
         const frameFn = (t) => {
-            const p = Math.min(1, (t - t0) / duration);
+            const p = finishNow ? 1 : Math.min(1, (t - t0) / duration);
             step(1 - Math.pow(1 - p, 3));
             if (p < 1) requestAnimationFrame(frameFn);
         };
@@ -687,7 +855,7 @@
         animate(1000, (t) => renderStats(t));
     });
 
-    onFirstView(document.querySelector(".tpd-charts"), () => {
+    onFirstView(document.querySelector(".tpd-top"), () => {
         if (REDUCED_MOTION) { chartP = 1; drawCharts(); return; }
         animate(1200, (t) => { chartP = t; drawCharts(); });
     });

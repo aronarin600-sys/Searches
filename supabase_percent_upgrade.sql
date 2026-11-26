@@ -65,10 +65,10 @@ TO authenticated
 USING (public.is_admin())
 WITH CHECK (public.is_admin());
 
--- 11c. USD is never public any more (percentages replace it). Switch the old option off.
-UPDATE public.site_settings SET show_public_usd = false WHERE id = 1;
+-- 11c. Public USD returns are controlled by site_settings.show_public_usd (Admin Portal switch).
 
--- 11d. Public read path: % and pips for everyone, USD and balance for admins only
+-- 11d. Public read path: % and pips for everyone; USD P&L for admins, or for everyone when the
+--      admin switches "Public USD Returns" on. Capital and balances are admins only.
 DROP FUNCTION IF EXISTS public.get_published_performance();
 CREATE FUNCTION public.get_published_performance()
 RETURNS TABLE (
@@ -95,7 +95,9 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
     WITH adm AS (
-        SELECT public.is_admin() AS yes
+        SELECT public.is_admin() AS yes,
+               public.is_admin()
+               OR COALESCE((SELECT s.show_public_usd FROM public.site_settings s WHERE s.id = 1), false) AS usd
     ),
     cap AS (
         SELECT (SELECT a.starting_capital FROM public.trading_account a WHERE a.id = 1) AS amount
@@ -119,7 +121,7 @@ AS $$
     )
     SELECT c.id,
            c.trading_date,
-           CASE WHEN adm.yes THEN c.daily_net_pnl END,
+           CASE WHEN adm.usd THEN c.daily_net_pnl END,
            c.trading_status,
            c.num_trades,
            c.winning_trades,
@@ -132,7 +134,7 @@ AS $$
            c.market_notes,
            CASE WHEN c.sb > 0 THEN ROUND(c.daily_net_pnl / c.sb * 100, 6) END,
            CASE WHEN adm.yes THEN c.sb END,
-           adm.yes
+           adm.usd
     FROM calc c
     CROSS JOIN adm
     ORDER BY c.trading_date ASC;
@@ -175,6 +177,8 @@ USING (public.is_admin())
 WITH CHECK (public.is_admin());
 
 -- ==============================================================================
+NOTIFY pgrst, 'reload schema';  -- make the website see the new tables right away
+
 -- 11f. SELF-TEST (changes nothing: the test data is rolled back automatically)
 -- Starting capital 100,000: +5,000 -> +5.00%, +2,100 -> +2.00%, -1,071 -> -1.00%.
 -- Runs as a logged-out visitor would see it, so USD must come back hidden.
@@ -191,6 +195,7 @@ DECLARE
 BEGIN
     BEGIN
         UPDATE public.trading_account SET starting_capital = 100000 WHERE id = 1;
+        UPDATE public.site_settings SET show_public_usd = false WHERE id = 1;  -- test the "% only" mode
         INSERT INTO public.daily_performance (trading_date, daily_net_pnl, trading_status, publication_status) VALUES
             (DATE '1990-01-02',  5000, 'Profit', 'Published'),
             (DATE '1990-01-03',  2100, 'Profit', 'Published'),
@@ -214,7 +219,7 @@ BEGIN
             CASE WHEN round(pcts[2], 2) = 2.00 THEN 'PASS' ELSE 'FAIL' END),
         (3, 'Day 3: -1,071 on 107,100', '-1.00%', to_char(pcts[3], 'FMSG990.00') || '%',
             CASE WHEN round(pcts[3], 2) = -1.00 THEN 'PASS' ELSE 'FAIL' END),
-        (4, 'Logged-out visitor gets no USD P&L', 'hidden',
+        (4, 'USD switch off: visitor gets no USD', 'hidden',
             CASE WHEN usd_hidden THEN 'hidden' ELSE 'VISIBLE' END,
             CASE WHEN usd_hidden AND n = 3 THEN 'PASS' ELSE 'FAIL' END),
         (5, 'Logged-out visitor gets no balance', 'hidden',

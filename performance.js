@@ -137,10 +137,15 @@ async function fetchPerformanceData() {
 }
 
 // Who is viewing? (for the small status note)
+let publicUsdEnabled = false;
 async function loadVisibilityInfo(supabase) {
     try {
-        const { data: admin } = await supabase.rpc("is_admin");
+        const [{ data: admin }, { data: setting }] = await Promise.all([
+            supabase.rpc("is_admin"),
+            supabase.from("site_settings").select("show_public_usd").eq("id", 1).maybeSingle(),
+        ]);
         viewerIsAdmin = admin === true;
+        publicUsdEnabled = !!(setting && setting.show_public_usd);
     } catch (e) {
         viewerIsAdmin = false;
     }
@@ -152,7 +157,10 @@ function renderVisibilityNote() {
     if (!note) return;
     if (viewerIsAdmin && amountsVisible) {
         note.innerHTML = `<span class="pill">Admin view</span>` +
-            `<span>You see USD and %. Visitors see only percentages and pips.</span>`;
+            `<span>You see USD and %. Visitors currently see ${publicUsdEnabled ? "<strong>USD and %</strong>" : "<strong>% only</strong>"}. Change this in the Admin Portal.</span>`;
+        note.hidden = false;
+    } else if (amountsVisible && publishedRecords.length) {
+        note.innerHTML = `<span>Daily results are shown as a percentage of the trading account and in USD.</span>`;
         note.hidden = false;
     } else if (publishedRecords.length) {
         note.innerHTML = `<span>Results are shown as a percentage of the trading account. Each day's colour shows its result.</span>`;
@@ -197,7 +205,7 @@ function calculateAndDisplayMetrics() {
     const subEl = document.getElementById("metricPnlSub");
     if (subEl) {
         subEl.textContent = amountsVisible
-            ? `Admin: ${window.SPACFX.formatCurrency(totalPnl, true)} net P/L`
+            ? `${viewerIsAdmin ? "Admin: " : ""}${window.SPACFX.formatCurrency(totalPnl, true)} net P/L`
             : (totalRet === null ? "Available once the account capital is set" : "Compounded since start");
     }
 

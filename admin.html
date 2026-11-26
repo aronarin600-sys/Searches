@@ -542,11 +542,25 @@
             <!-- TAB 1: DAILY PERFORMANCE TRACKER -->
             <div id="tab-performance" class="tab-content active">
 
-                <!-- Account capital & balance (admin-only; the public only ever sees %) -->
+                <!-- Public USD returns switch (enforced by the database: site_settings + get_published_performance) -->
+                <div class="card" id="publicUsdCard">
+                    <div class="card-header">
+                        <h3 class="card-title">Public USD Returns</h3>
+                        <span id="publicUsdStatus" style="font-weight: 700; font-size: 0.9rem; color: var(--text-muted);">Checking…</span>
+                    </div>
+                    <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 14px;">
+                        Percentages are always shown to visitors. Turn this on to also show the daily USD profit/loss on the public website;
+                        turn it off to show percentages only. Your capital and balance are never shown to the public.
+                    </p>
+                    <button class="btn btn-sm" id="publicUsdToggleBtn" type="button" disabled>Loading…</button>
+                    <div id="publicUsdHint" style="font-size: 0.82rem; color: var(--text-muted); margin-top: 10px;"></div>
+                </div>
+
+                <!-- Account capital & balance (admin-only; never public) -->
                 <div class="card" id="capitalCard">
                     <div class="card-header">
                         <h3 class="card-title">Account Capital &amp; Balance</h3>
-                        <span style="font-size: 0.82rem; color: var(--text-muted);">🔒 Private — visitors only see % and pips</span>
+                        <span style="font-size: 0.82rem; color: var(--text-muted);">🔒 Private — capital and balance are never public</span>
                     </div>
 
                     <div class="acct-stats" id="acctStats">
@@ -720,7 +734,10 @@
                 <div class="card">
                     <div class="card-header">
                         <h3 class="card-title">All Saved Records</h3>
-                        <span id="recordCount" style="color: var(--text-muted); font-size: 0.85rem;">0 records</span>
+                        <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                            <span id="recordCount" style="color: var(--text-muted); font-size: 0.85rem;">0 records</span>
+                            <button class="btn btn-outline btn-sm" id="downloadJournalBtn" type="button">⬇ Download Journal (CSV)</button>
+                        </div>
                     </div>
 
                     <div class="table-responsive">
@@ -1106,6 +1123,7 @@
             logoutBtn.style.display = "inline-flex";
             document.getElementById("flowDate").value = todayStr;
             refreshAccountAndRecords();
+            loadPublicUsdSetting();
             loadReviews();
             loadInquiries();
             updateCurrencyLabels();
@@ -1132,6 +1150,64 @@
             list.forEach((p) => { if (!Number.isFinite(p)) return; g *= 1 + p / 100; if (g > peak) peak = g; worst = Math.max(worst, (peak - g) / peak); });
             return worst * 100;
         };
+
+        // ---- Public USD returns switch (site_settings.show_public_usd; only admins can change it) ----
+        let publicUsdOn = false;
+
+        function renderPublicUsdSetting(on, canEdit, hint) {
+            const status = document.getElementById("publicUsdStatus");
+            const btn = document.getElementById("publicUsdToggleBtn");
+            publicUsdOn = on;
+            status.textContent = on ? "Shown to public (USD + %)" : "Hidden from public (% only)";
+            status.style.color = on ? "#10b981" : "var(--gold-light)";
+            btn.textContent = on ? "Hide USD — show % only" : "Show USD returns to public";
+            btn.disabled = !canEdit;
+            document.getElementById("publicUsdHint").textContent = hint || "";
+        }
+
+        async function loadPublicUsdSetting() {
+            const supabase = window.SPACFX.getClient();
+            if (!supabase) return;
+            try {
+                const [{ data: setting, error }, { data: admin }] = await Promise.all([
+                    supabase.from("site_settings").select("show_public_usd").eq("id", 1).maybeSingle(),
+                    supabase.rpc("is_admin"),
+                ]);
+                if (error || !setting) {
+                    document.getElementById("publicUsdStatus").textContent = "Not set up";
+                    document.getElementById("publicUsdToggleBtn").disabled = true;
+                    document.getElementById("publicUsdHint").textContent = "Run the Public USD SQL in the Supabase SQL Editor to enable this switch.";
+                    return;
+                }
+                renderPublicUsdSetting(!!setting.show_public_usd, admin === true,
+                    admin === true ? "" : "Your account is not on the admin allowlist, so this setting is read-only.");
+            } catch (err) {
+                console.warn("Could not load public USD setting:", err);
+            }
+        }
+
+        document.getElementById("publicUsdToggleBtn").addEventListener("click", async () => {
+            const supabase = window.SPACFX.getClient();
+            if (!supabase) return;
+            const btn = document.getElementById("publicUsdToggleBtn");
+            btn.disabled = true;
+            const next = !publicUsdOn;
+            try {
+                // RLS only lets allowlisted admins update this row; anyone else updates 0 rows.
+                const { data, error } = await supabase
+                    .from("site_settings")
+                    .update({ show_public_usd: next })
+                    .eq("id", 1)
+                    .select("show_public_usd");
+                if (error) throw error;
+                if (!data || data.length === 0) throw new Error("Not permitted. Only allowlisted admins can change this setting.");
+                renderPublicUsdSetting(!!data[0].show_public_usd, true);
+                showNotice(next ? "Visitors now see USD returns and percentages." : "USD hidden. Visitors now see percentages only.", "success");
+            } catch (err) {
+                showNotice("Could not update: " + err.message, "error");
+                btn.disabled = false;
+            }
+        });
 
         let startingCapital = null;
         let currentFlows = [];
@@ -1219,6 +1295,39 @@
                 </tr>`;
             }).join("");
         }
+
+        // Download the full journal (all records, drafts included) as a CSV spreadsheet
+        document.getElementById("downloadJournalBtn").addEventListener("click", () => {
+            if (!currentRecords.length) { showNotice("No records to download yet.", "info"); return; }
+            const cell = (v) => {
+                if (v === null || v === undefined) return "";
+                const s = String(v);
+                return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+            };
+            const head = ["Date", "Status", "Publication", "Net P&L (USD)", "Start balance (USD)", "Daily %", "Net pips", "Net R",
+                "Trades", "Winning", "Losing", "Break-even", "Win rate %", "Avg R:R", "Notes"];
+            const rows = currentRecords.slice().sort((a, b) => (a.trading_date < b.trading_date ? -1 : 1)).map((r) => {
+                const c = pctById.get(r.id);
+                const counted = r.publication_status === "Published" && c;
+                return [
+                    r.trading_date, r.trading_status, r.publication_status, r.daily_net_pnl,
+                    counted && c.sb !== null ? c.sb.toFixed(2) : "",
+                    counted && c.pct !== null ? c.pct.toFixed(2) : "",
+                    r.net_pips, r.net_r, r.num_trades, r.winning_trades, r.losing_trades, r.be_trades,
+                    r.win_rate, r.risk_reward, r.market_notes,
+                ].map(cell).join(",");
+            });
+            const blob = new Blob(["﻿" + [head.join(","), ...rows].join("\r\n")], { type: "text/csv;charset=utf-8" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `spacfx-journal-${todayStr}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 2000);
+            showNotice("Journal downloaded. Open it with Excel or Google Sheets.", "success");
+        });
 
         // Reload everything that depends on capital, flows or records
         async function refreshAccountAndRecords() {

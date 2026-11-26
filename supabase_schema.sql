@@ -366,10 +366,10 @@ TO authenticated
 USING (public.is_admin())
 WITH CHECK (public.is_admin());
 
--- 11c. USD is never public any more (percentages replace it). Switch the old option off.
-UPDATE public.site_settings SET show_public_usd = false WHERE id = 1;
+-- 11c. Public USD returns are controlled by site_settings.show_public_usd (Admin Portal switch).
 
--- 11d. Public read path: % and pips for everyone, USD and balance for admins only
+-- 11d. Public read path: % and pips for everyone; USD P&L for admins, or for everyone when the
+--      admin switches "Public USD Returns" on. Capital and balances are admins only.
 DROP FUNCTION IF EXISTS public.get_published_performance();
 CREATE FUNCTION public.get_published_performance()
 RETURNS TABLE (
@@ -396,7 +396,9 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
     WITH adm AS (
-        SELECT public.is_admin() AS yes
+        SELECT public.is_admin() AS yes,
+               public.is_admin()
+               OR COALESCE((SELECT s.show_public_usd FROM public.site_settings s WHERE s.id = 1), false) AS usd
     ),
     cap AS (
         SELECT (SELECT a.starting_capital FROM public.trading_account a WHERE a.id = 1) AS amount
@@ -420,7 +422,7 @@ AS $$
     )
     SELECT c.id,
            c.trading_date,
-           CASE WHEN adm.yes THEN c.daily_net_pnl END,
+           CASE WHEN adm.usd THEN c.daily_net_pnl END,
            c.trading_status,
            c.num_trades,
            c.winning_trades,
@@ -433,7 +435,7 @@ AS $$
            c.market_notes,
            CASE WHEN c.sb > 0 THEN ROUND(c.daily_net_pnl / c.sb * 100, 6) END,
            CASE WHEN adm.yes THEN c.sb END,
-           adm.yes
+           adm.usd
     FROM calc c
     CROSS JOIN adm
     ORDER BY c.trading_date ASC;
